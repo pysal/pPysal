@@ -1,6 +1,8 @@
 import pysal
 from pysal.cg.standalone import get_shared_segments
 import numpy as np
+from collections import defaultdict
+from itertools import combinations
 
 
 
@@ -71,9 +73,12 @@ def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
     return results
 
 
-def check_joins(polygon_ids, poly2cells, cells, shapes, weight_type='ROOK'):
+def check_joins(poly2cells, cells, shapes, weight_type='ROOK',
+        polygon_ids = []):
     w = {}
     weight_type = weight_type.upper()
+    if polygon_ids == []:
+        polygon_ids = range(len(poly2cells))
     for poly_id in polygon_ids:
         poly_cells = poly2cells[poly_id]
         candidates = set()
@@ -91,9 +96,22 @@ def check_joins(polygon_ids, poly2cells, cells, shapes, weight_type='ROOK'):
             p1 = shapes[id1]
             if bbcommon(p0.bounding_box,p1.bounding_box):
                 common = verts0.intersection(p1.vertices)
-                if len(common) > 1:
-                    join = True
-                if len(common) > 0 and weight_type == 'QUEEN':
+                n_common = len(common)
+                if n_common > 1 and weight_type == 'ROOK':
+                    d0 = defaultdict(list)
+                    d1 = defaultdict(list)
+                    for i,v in enumerate(p0.vertices[:-1]):
+                        d0[v].append(p0.vertices[i+1])
+                        d0[p0.vertices[i+1]].append(v)
+                    for i,v in enumerate(p1.vertices[:-1]):
+                        d1[v].append(p1.vertices[i+1])
+                        d1[p1.vertices[i+1]].append(v)
+                    for seq in combinations(common,2):
+                        l,r = seq
+                        if l in d0[r] and l in d1[r]:
+                            join = True
+                            break
+                if n_common > 0 and weight_type == 'QUEEN':
                     join = True
                 if join:
                     w[poly_id].add(id1)
@@ -106,38 +124,27 @@ def check_joins(polygon_ids, poly2cells, cells, shapes, weight_type='ROOK'):
 
 if __name__ == "__main__":
     import time
-    fname = pysal.examples.get_path('10740.shp')
+    #fname = pysal.examples.get_path('10740.shp')
+    fname = pysal.examples.get_path('nat.shp')
     t0 = time.time()
     c = pysal.weights.Contiguity.ContiguityWeights(pysal.open(fname), ROOK)
     t1 = time.time()
     print "using " + str(fname)
     print "time elapsed for ... using bins: " + str(t1 - t0)
-    fname = pysal.examples.get_path('10740.shp')
     res= bin_shapefile(fname)
 
-
-
-    # for a parallel implementation we will farm out subsets of the polygons
-    # to different engines. here we just do it in line prior to true
-    # parallelization
-    ranges =  [ range(start, start+10) for start in range(0,195,10) ]
-    ranges[-1] = range(190,195)
-    cj = check_joins
-    ws = [ cj(rg, res['poly2cells'], res['cells'], res['shapes']) \
-            for rg in ranges]
-    # combine the w dicts from the different engines
-    wp = dict([ (i, set()) for i in range(len(res['shapes']))])
-    for wo in ws:
-        for key in wo:
-            wp[key] = wp[key].union(wo[key])
 
 
     t2 = time.time()
-    fname = pysal.examples.get_path('10740.shp')
     res= bin_shapefile(fname)
-    w = check_joins(range(195),res['poly2cells'], res['cells'], res['shapes'])
+    w = check_joins(res['poly2cells'], res['cells'], res['shapes'])
     t3 = time.time()
     print 'time refactored prior to parallelization: ', str(t3-t2)
 
     print c.w == w
+
+    keys = c.w.keys()
+    for key in keys:
+        if c.w[key] != w[key]:
+            print key, c.w[key], w[key]
 

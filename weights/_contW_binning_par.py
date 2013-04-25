@@ -99,7 +99,7 @@ def check_joins(poly2cells, cells, shapes, weight_type='ROOK',
             for j in nbrs:
                 join = False
                 if j not in vertCache:
-                    vertCache[j] = set(shpaes[j].vertices)
+                    vertCache[j] = set(shapes[j].vertices)
                 common = vertCache[polyId].intersection(vertCache[j])
                 if len(common) > 0:
                     join = True

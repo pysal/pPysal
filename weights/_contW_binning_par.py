@@ -35,7 +35,6 @@ def bbcommon(bb, bbother):
 
 def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
 
-    t1 = time.time()
 
     shpFileObject = pysal.open(shpFile)
 
@@ -99,15 +98,11 @@ def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
             if polyId < j:
                 if bbcommon(bbcache[polyId], bbcache[j]):
                     w[polyId].add(j)
-    t2 = time.time()
-    print t2-t1
 
     results = {}
     results['n_polygons'] = numPoly
     results['potential_neighbors'] = w
     results['shapes'] = shapes
-    t2 = time.time()
-    print t2 - t1
     return results
 
 
@@ -188,71 +183,6 @@ def check_joins(potential_neighbors, shapes, weight_type='ROOK',
 
 
 
-def bin_shapefile1(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
-        shpFileObject = pysal.open(shpFile)
-
-        if shpFileObject.type != pysal.cg.Polygon:
-            return False
-
-        shapebox = shpFileObject.bbox      # bounding box
-
-        numPoly = len(shpFileObject)
-
-        # bucket size
-        if (numPoly < SHP_SMALL):
-            bucketmin = numPoly / BUCK_SM + 2
-        else:
-            bucketmin = numPoly / BUCK_LG + 2
-        # bucket length
-        lengthx = ((shapebox[2] + DELTA) - shapebox[0]) / bucketmin
-        lengthy = ((shapebox[3] + DELTA) - shapebox[1]) / bucketmin
-
-        # initialize buckets
-        columns = [set() for i in range(bucketmin)]
-        rows = [set() for i in range(bucketmin)]
-
-        minbox = shapebox[:2] * \
-            2                                  # minx,miny,minx,miny
-        binWidth = [lengthx, lengthy] * \
-            2                              # lenx,leny,lenx,leny
-        bbcache = {}
-        poly2Column = [set() for i in range(numPoly)]
-        poly2Row = [set() for i in range(numPoly)]
-        for i in range(numPoly):
-            shpObj = shpFileObject.get(i)
-            bbcache[i] = shpObj.bounding_box[:]
-            projBBox = [int((shpObj.bounding_box[:][j] -
-                             minbox[j]) / binWidth[j]) for j in xrange(4)]
-            for j in range(projBBox[0], projBBox[2] + 1):
-                columns[j].add(i)
-                poly2Column[i].add(j)
-            for j in range(projBBox[1], projBBox[3] + 1):
-                rows[j].add(i)
-                poly2Row[i].add(j)
-        # loop over polygons rather than bins
-        w = {}
-        for polyId in xrange(numPoly):
-            idRows = poly2Row[polyId]
-            idCols = poly2Column[polyId]
-            rowPotentialNeighbors = set()
-            colPotentialNeighbors = set()
-            for row in idRows:
-                rowPotentialNeighbors = rowPotentialNeighbors.union(rows[row])
-            for col in idCols:
-                colPotentialNeighbors = colPotentialNeighbors.union(
-                    columns[col])
-            potentialNeighbors = rowPotentialNeighbors.intersection(
-                colPotentialNeighbors)
-            if polyId not in w:
-                w[polyId] = set()
-            for j in potentialNeighbors:
-                if polyId < j:
-                    if bbcommon(bbcache[polyId], bbcache[j]):
-                        w[polyId].add(j)
-        shpFileObject.close()
-        return w
-
-
 
 if __name__ == "__main__":
     import time
@@ -275,8 +205,10 @@ if __name__ == "__main__":
 
     print c.w == w
 
-    #keys = c.w.keys()
-    #for key in keys:
-    #    if c.w[key] != w[key]:
-    #        print key, c.w[key], w[key]
+    if c.w != w:
+
+        keys = c.w.keys()
+        for key in keys:
+            if c.w[key] != w[key]:
+                print key, c.w[key], w[key]
 

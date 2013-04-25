@@ -35,65 +35,98 @@ def bbcommon(bb, bbother):
 
 def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
 
-    # set up bins
+    t1 = time.time()
 
-    shpfr = pysal.open(shpFile)
+    shpFileObject = pysal.open(shpFile)
 
-    n_polygons = len(shpfr)
+    if shpFileObject.type != pysal.cg.Polygon:
+        return False
 
+    shapebox = shpFileObject.bbox      # bounding box
 
-    c_bins = np.linspace(shpfr.bbox[0], shpfr.bbox[2]*buff, n_cols)
-    r_bins = np.linspace(shpfr.bbox[1], shpfr.bbox[3]*buff, n_rows)
+    numPoly = len(shpFileObject)
+    shapes = [[]] * numPoly
 
-    cells = dict([((i,j), set()) for i in range(n_rows+1) \
-            for j in range(n_cols+1)])
-    poly2cells= dict([ (i,set()) for i in xrange(n_polygons) ])
+    # bucket size
+    if (numPoly < SHP_SMALL):
+        bucketmin = numPoly / BUCK_SM + 2
+    else:
+        bucketmin = numPoly / BUCK_LG + 2
+    # bucket length
+    lengthx = ((shapebox[2] + DELTA) - shapebox[0]) / bucketmin
+    lengthy = ((shapebox[3] + DELTA) - shapebox[1]) / bucketmin
 
+    # initialize buckets
+    columns = [set() for i in range(bucketmin)]
+    rows = [set() for i in range(bucketmin)]
 
-    shps = []
+    minbox = shapebox[:2] * \
+        2                                  # minx,miny,minx,miny
+    binWidth = [lengthx, lengthy] * \
+        2                              # lenx,leny,lenx,leny
+    bbcache = {}
+    poly2Column = [set() for i in range(numPoly)]
+    poly2Row = [set() for i in range(numPoly)]
+    for i in range(numPoly):
+        shpObj = shpFileObject.get(i)
+        bbcache[i] = shpObj.bounding_box[:]
+        shapes[i] = shpObj
+        projBBox = [int((shpObj.bounding_box[:][j] -
+                         minbox[j]) / binWidth[j]) for j in xrange(4)]
+        for j in range(projBBox[0], projBBox[2] + 1):
+            columns[j].add(i)
+            poly2Column[i].add(j)
+        for j in range(projBBox[1], projBBox[3] + 1):
+            rows[j].add(i)
+            poly2Row[i].add(j)
+    # loop over polygons rather than bins
+    w = {}
+    for polyId in xrange(numPoly):
+        idRows = poly2Row[polyId]
+        idCols = poly2Column[polyId]
+        rowPotentialNeighbors = set()
+        colPotentialNeighbors = set()
+        for row in idRows:
+            rowPotentialNeighbors = rowPotentialNeighbors.union(rows[row])
+        for col in idCols:
+            colPotentialNeighbors = colPotentialNeighbors.union(
+                columns[col])
+        potentialNeighbors = rowPotentialNeighbors.intersection(
+            colPotentialNeighbors)
+        if polyId not in w:
+            w[polyId] = set()
+        for j in potentialNeighbors:
+            if polyId < j:
+                if bbcommon(bbcache[polyId], bbcache[j]):
+                    w[polyId].add(j)
+    t2 = time.time()
+    print t2-t1
 
-    for i in xrange(n_polygons):
-        shpObj = shpfr.get(i)
-        shps.append(shpObj)
-        sbbox = shpObj.bounding_box[:]
-        l = np.digitize([sbbox[0]], c_bins)[0]
-        r = np.digitize([sbbox[2]], c_bins)[0] + 1
-        b = np.digitize([sbbox[1]], r_bins)[0]
-        t = np.digitize([sbbox[3]], r_bins)[0] + 1
-        for row in range(l,r):
-            for col in range(b,t):
-                cells[(row,col)].add(i)
-                poly2cells[i].add((row,col))
-    shpfr.close()
     results = {}
-    results['n_polygons'] = n_polygons
-    results['cells'] = cells
-    results['poly2cells'] = poly2cells
-    results['shapes'] = shps
+    results['n_polygons'] = numPoly
+    results['potential_neighbors'] = w
+    results['shapes'] = shapes
+    t2 = time.time()
+    print t2 - t1
     return results
 
 
-def check_joins(poly2cells, cells, shapes, weight_type='ROOK',
+def check_joins(potential_neighbors, shapes, weight_type='ROOK',
         polygon_ids = []):
     w = {}
     weight_type = weight_type.upper()
 
     if not polygon_ids:
-        polygon_ids = xrange(len(poly2cells))
+        polygon_ids = xrange(len(shapes))
 
     if weight_type == 'QUEEN':
         # check for a shared vertex
         vertCache = {}
         for polyId in polygon_ids:
             iVerts = shapes[polyId].vertices
-            poly_cells = poly2cells[polyId]
-            candidates = set()
-            for cell in poly_cells:
-                candidates = candidates.union(cells[cell])
-            candidates.discard(polyId)
+            nbrs = potential_neighbors[polyId]
             if polyId not in vertCache:
                 vertCache[polyId] = set(iVerts)
-            nbrs = [j for j in candidates if j > polyId]
             if polyId not in w:
                 w[polyId] = set()
             for j in nbrs:
@@ -124,12 +157,7 @@ def check_joins(poly2cells, cells, shapes, weight_type='ROOK',
                     iEdges[(l,r)] = []
                     iEdges[(r,l)] = []
                 edgeCache[polyId] = iEdges
-            poly_cells = poly2cells[polyId]
-            candidates = set()
-            for cell in poly_cells:
-                candidates = candidates.union(cells[cell])
-            candidates.discard(polyId)
-            nbrs = [j for j in candidates if j > polyId]
+            nbrs = potential_neighbors[polyId]
             if polyId not in w:
                 w[polyId] = set()
             for j in nbrs:
@@ -241,14 +269,14 @@ if __name__ == "__main__":
 
     t2 = time.time()
     res= bin_shapefile(fname)
-    w = check_joins(res['poly2cells'], res['cells'], res['shapes'])
+    w = check_joins(res['potential_neighbors'], res['shapes'])
     t3 = time.time()
     print 'time refactored prior to parallelization: ', str(t3-t2)
 
     print c.w == w
 
-    keys = c.w.keys()
-    for key in keys:
-        if c.w[key] != w[key]:
-            print key, c.w[key], w[key]
+    #keys = c.w.keys()
+    #for key in keys:
+    #    if c.w[key] != w[key]:
+    #        print key, c.w[key], w[key]
 

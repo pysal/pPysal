@@ -1,4 +1,4 @@
-import pysal
+import pysal 
 from pysal.cg.standalone import get_shared_segments
 import numpy as np
 from collections import defaultdict
@@ -77,48 +77,152 @@ def check_joins(poly2cells, cells, shapes, weight_type='ROOK',
         polygon_ids = []):
     w = {}
     weight_type = weight_type.upper()
-    if polygon_ids == []:
-        polygon_ids = range(len(poly2cells))
-    for poly_id in polygon_ids:
-        poly_cells = poly2cells[poly_id]
-        candidates = set()
-        for cell in poly_cells:
-            candidates = candidates.union(cells[cell])
-        candidates.discard(poly_id)
-        # only check half-set
-        candidates = [ poly for poly in candidates if poly > poly_id ] 
-        p0 = shapes[poly_id]
-        verts0 = set(p0.vertices)
-        if poly_id not in w:
-            w[poly_id] = set()
-        for id1 in candidates:
-            join = False
-            p1 = shapes[id1]
-            if bbcommon(p0.bounding_box,p1.bounding_box):
-                common = verts0.intersection(p1.vertices)
-                n_common = len(common)
-                if n_common > 1 and weight_type == 'ROOK':
-                    d0 = defaultdict(list)
-                    d1 = defaultdict(list)
-                    for i,v in enumerate(p0.vertices[:-1]):
-                        d0[v].append(p0.vertices[i+1])
-                        d0[p0.vertices[i+1]].append(v)
-                    for i,v in enumerate(p1.vertices[:-1]):
-                        d1[v].append(p1.vertices[i+1])
-                        d1[p1.vertices[i+1]].append(v)
-                    for seq in combinations(common,2):
-                        l,r = seq
-                        if l in d0[r] and l in d1[r]:
-                            join = True
-                            break
-                if n_common > 0 and weight_type == 'QUEEN':
+
+    if not polygon_ids:
+        polygon_ids = xrange(len(poly2cells))
+
+    if weight_type == 'QUEEN':
+        # check for a shared vertex
+        vertCache = {}
+        for polyId in polygon_ids:
+            iVerts = shapes[polyId].vertices
+            poly_cells = poly2cells[polyId]
+            candidates = set()
+            for cell in poly_cells:
+                candidates = candidates.union(cells[cell])
+            candidates.discard(polyId)
+            if polyId not in vertCache:
+                vertCache[polyId] = set(iVerts)
+            nbrs = [j for j in candidates if j > polyId]
+            if polyId not in w:
+                w[polyId] = set()
+            for j in nbrs:
+                join = False
+                if j not in vertCache:
+                    vertCache[j] = set(shpaes[j].vertices)
+                common = vertCache[polyId].intersection(vertCache[j])
+                if len(common) > 0:
                     join = True
                 if join:
-                    w[poly_id].add(id1)
-                    if id1 not in w:
-                        w[id1] = set()
-                    w[id1].add(poly_id)
-    return w
+                    w[polyId].add(j)
+                    if j not in w:
+                        w[j] = set()
+                    w[j].add(polyId)
+        return w
+    elif weight_type == 'ROOK':
+        # check for a shared edge
+        edgeCache = {}
+        for polyId in polygon_ids:
+            if polyId not in edgeCache:
+                iEdges ={}
+                iVerts = shapes[polyId].vertices
+                nv = len(iVerts)
+                ne = nv - 1
+                for i in range(ne):
+                    l = iVerts[i]
+                    r = iVerts[i+1]
+                    iEdges[(l,r)] = []
+                    iEdges[(r,l)] = []
+                edgeCache[polyId] = iEdges
+            poly_cells = poly2cells[polyId]
+            candidates = set()
+            for cell in poly_cells:
+                candidates = candidates.union(cells[cell])
+            candidates.discard(polyId)
+            nbrs = [j for j in candidates if j > polyId]
+            if polyId not in w:
+                w[polyId] = set()
+            for j in nbrs:
+                join = False
+                if j not in edgeCache:
+                    jVerts = shapes[j].vertices
+                    jEdges = {}
+                    nv = len(jVerts)
+                    ne = nv - 1
+                    for e in range(ne):
+                        l = jVerts[e]
+                        r = jVerts[e+1]
+                        jEdges[(l,r)] = []
+                        jEdges[(r,l)] = []
+                    edgeCache[j] = jEdges
+                for edge in edgeCache[j]:
+                    if edge in edgeCache[polyId]:
+                        join = True
+                        w[polyId].add(j)
+                        if j not in w:
+                            w[j] = set()
+                        w[j].add(polyId)
+                        break
+        return w
+    else:
+        print 'unsupported weight type'
+        return None
+
+
+
+def bin_shapefile1(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
+        shpFileObject = pysal.open(shpFile)
+
+        if shpFileObject.type != pysal.cg.Polygon:
+            return False
+
+        shapebox = shpFileObject.bbox      # bounding box
+
+        numPoly = len(shpFileObject)
+
+        # bucket size
+        if (numPoly < SHP_SMALL):
+            bucketmin = numPoly / BUCK_SM + 2
+        else:
+            bucketmin = numPoly / BUCK_LG + 2
+        # bucket length
+        lengthx = ((shapebox[2] + DELTA) - shapebox[0]) / bucketmin
+        lengthy = ((shapebox[3] + DELTA) - shapebox[1]) / bucketmin
+
+        # initialize buckets
+        columns = [set() for i in range(bucketmin)]
+        rows = [set() for i in range(bucketmin)]
+
+        minbox = shapebox[:2] * \
+            2                                  # minx,miny,minx,miny
+        binWidth = [lengthx, lengthy] * \
+            2                              # lenx,leny,lenx,leny
+        bbcache = {}
+        poly2Column = [set() for i in range(numPoly)]
+        poly2Row = [set() for i in range(numPoly)]
+        for i in range(numPoly):
+            shpObj = shpFileObject.get(i)
+            bbcache[i] = shpObj.bounding_box[:]
+            projBBox = [int((shpObj.bounding_box[:][j] -
+                             minbox[j]) / binWidth[j]) for j in xrange(4)]
+            for j in range(projBBox[0], projBBox[2] + 1):
+                columns[j].add(i)
+                poly2Column[i].add(j)
+            for j in range(projBBox[1], projBBox[3] + 1):
+                rows[j].add(i)
+                poly2Row[i].add(j)
+        # loop over polygons rather than bins
+        w = {}
+        for polyId in xrange(numPoly):
+            idRows = poly2Row[polyId]
+            idCols = poly2Column[polyId]
+            rowPotentialNeighbors = set()
+            colPotentialNeighbors = set()
+            for row in idRows:
+                rowPotentialNeighbors = rowPotentialNeighbors.union(rows[row])
+            for col in idCols:
+                colPotentialNeighbors = colPotentialNeighbors.union(
+                    columns[col])
+            potentialNeighbors = rowPotentialNeighbors.intersection(
+                colPotentialNeighbors)
+            if polyId not in w:
+                w[polyId] = set()
+            for j in potentialNeighbors:
+                if polyId < j:
+                    if bbcommon(bbcache[polyId], bbcache[j]):
+                        w[polyId].add(j)
+        shpFileObject.close()
+        return w
 
 
 

@@ -287,7 +287,7 @@ def pcheck_joins(potential_neighbors, shapes, mdict,x,step, weight_type='ROOK',
 if __name__ == "__main__":
     import time
     #fname = pysal.examples.get_path('10740.shp')
-    fname = pysal.examples.get_path('nat.shp')
+    fname = '100x100.shp' #pysal.examples.get_path('nat.shp')
     t0 = time.time()
     c = pysal.weights.Contiguity.ContiguityWeights(pysal.open(fname), ROOK)
     t1 = time.time()
@@ -298,7 +298,7 @@ if __name__ == "__main__":
 
 
     t2 = time.time()
-    res= bin_shapefile(fname)
+    res = bin_shapefile(fname)
     w = check_joins(res['potential_neighbors'], res['shapes'])
     t3 = time.time()
     print 'time refactored prior to parallelization: ', str(t3-t2)

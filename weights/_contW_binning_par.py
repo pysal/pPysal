@@ -3,7 +3,7 @@ from pysal.cg.standalone import get_shared_segments
 import numpy as np
 from collections import defaultdict
 from itertools import combinations
-
+import multiprocessing as mp
 
 
 # delta to get buckets right
@@ -182,6 +182,106 @@ def check_joins(potential_neighbors, shapes, weight_type='ROOK',
         return None
 
 
+def pcheck_joins(potential_neighbors, shapes, mdict,x,step, weight_type='ROOK',
+        polygon_ids = []):
+
+    #PolyId Setup
+    polygon_ids = range(x, x+step)
+    
+    if x+step > len(shapes):
+        polygon_ids = range(x, len(shapes))
+    
+    from collections import defaultdict
+    from itertools import combinations
+    
+    def bbcommon(bb, bbother):
+        """
+        Checks for overlaps of bounding boxes. First, east-west, then north-south.
+        Element 0 is west, element 2 is east, element 1 is north, element 3 is
+        south
+        All four checks must be false for chflag to be true, meaning the two
+        bounding boxes do not overlap.
+        """
+        chflag = 0
+        if not ((bbother[2] < bb[0]) or (bbother[0] > bb[2])):
+            if not ((bbother[3] < bb[1]) or (bbother[1] > bb[3])):
+                chflag = 1
+        return chflag
+    
+    #w = {}
+    weight_type = weight_type.upper()
+
+    if not polygon_ids:
+        polygon_ids = xrange(len(shapes))
+
+    if weight_type == 'QUEEN':
+        # check for a shared vertex
+        vertCache = {}
+        for polyId in polygon_ids:
+            iVerts = shapes[polyId].vertices
+            nbrs = potential_neighbors[polyId]
+            if polyId not in vertCache:
+                vertCache[polyId] = set(iVerts)
+            if polyId not in w:
+                w[polyId] = set()
+            for j in nbrs:
+                join = False
+                if j not in vertCache:
+                    vertCache[j] = set(shapes[j].vertices)
+                common = vertCache[polyId].intersection(vertCache[j])
+                if len(common) > 0:
+                    join = True
+                if join:
+                    w[polyId].add(j)
+                    if j not in w:
+                        w[j] = set()
+                    w[j].add(polyId)
+        return w
+    elif weight_type == 'ROOK':
+        # check for a shared edge
+        edgeCache = {}
+        for polyId in polygon_ids:
+            if polyId not in edgeCache:
+                iEdges ={}
+                iVerts = shapes[polyId].vertices
+                nv = len(iVerts)
+                ne = nv - 1
+                for i in range(ne):
+                    l = iVerts[i]
+                    r = iVerts[i+1]
+                    iEdges[(l,r)] = []
+                    iEdges[(r,l)] = []
+                edgeCache[polyId] = iEdges
+            nbrs = potential_neighbors[polyId]
+            for j in nbrs:
+                join = False
+                if j not in edgeCache:
+                    jVerts = shapes[j].vertices
+                    jEdges = {}
+                    nv = len(jVerts)
+                    ne = nv - 1
+                    for e in range(ne):
+                        l = jVerts[e]
+                        r = jVerts[e+1]
+                        jEdges[(l,r)] = []
+                        jEdges[(r,l)] = []
+                    edgeCache[j] = jEdges
+                for edge in edgeCache[j]:
+                    if edge in edgeCache[polyId]:
+                        join = True
+                        d = mdict[polyId]
+                        d.add(j)
+                        mdict[polyId] = d
+                        if j not in mdict:
+                            mdict[j] = set()                        
+                        k = mdict[j]
+                        k.add(polyId)
+                        mdict[j] = k
+                        break
+    else:
+        print 'unsupported weight type'
+        return None
+
 
 
 if __name__ == "__main__":
@@ -202,7 +302,7 @@ if __name__ == "__main__":
     w = check_joins(res['potential_neighbors'], res['shapes'])
     t3 = time.time()
     print 'time refactored prior to parallelization: ', str(t3-t2)
-
+    print w[0]
     print c.w == w
 
     if c.w != w:
@@ -211,4 +311,29 @@ if __name__ == "__main__":
         for key in keys:
             if c.w[key] != w[key]:
                 print key, c.w[key], w[key]
+        
+    t4 = time.time()
+    #mp test using Processes
+    cores = mp.cpu_count()
+    pool = mp.Pool()
+    step = len(res['shapes']) / cores
+    manager = mp.Manager()
+    mdict = manager.dict() #The w
+    for x in range(len(res['shapes'])):
+        mdict[x] = set()
+    jobs = [pool.Process(target=pcheck_joins, args=(res['potential_neighbors'], res['shapes'],mdict,x,step)) for x in range(0,len(res['shapes']), len(res['shapes'])/cores)]
+    for job in jobs:
+        job.start()
+    for job in jobs:
+        job.join()
+    t5 = time.time()
+    print "MP using Process: {}".format(t5-t4)
+    
+    print c.w == mdict
+    
+    if c.w != mdict:
 
+        keys = c.w.keys()
+        for key in keys:
+            if c.w[key] != mdict[key]:
+                print key, c.w[key], mdict[key]    

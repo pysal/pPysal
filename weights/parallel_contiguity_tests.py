@@ -282,80 +282,67 @@ def bbcommon(bb, bbother):
         
 if __name__ == "__main__":
 
-    #fname = pysal.examples.get_path('10740.shp')
-    fname = '100x100.shp' #pysal.examples.get_path('nat.shp')
-    #t0 = time.time()
-    #c = pysal.weights.Contiguity.ContiguityWeights(pysal.open(fname), ROOK)
-    #t1 = time.time()
-    #print "using " + str(fname)
-    #print "time elapsed for ... using bins: " + str(t1 - t0)
-    res= bin_shapefile(fname)
-
-
-
-    t2 = time.time()
-    res = bin_shapefile(fname)
-    w = check_joins(res['potential_neighbors'], res['shapes'])
-    t3 = time.time()
-    print 'time refactored prior to parallelization: ', str(t3-t2)   
+    fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
+    for fname in fnames:
+ 
+        '''Optimized Serial Code'''
+        t2 = time.time()
+        res = bin_shapefile('TestData/'+fname)
+        w = check_joins(res['potential_neighbors'], res['shapes'])
+        t3 = time.time()
+        print str(fname)
+        print 'time refactored prior to parallelization: ', str(t3-t2)   
+        
+        '''PARALLEL CODE'''
+        t6 = time.time()
+        res = bin_shapefile('TestData/'+fname)
+        cores = mp.cpu_count()
+        #Create a joinable queue from which to draw cells and a solution queue to get results
+        q = mp.JoinableQueue()
+        resultq = mp.Queue()
+        
+        #Start up a number of child workers equal to the number of cores
+        #This is a great way to manage a web service.
+        jobs = [mp.Process(target=pcheck_joins2, args=(q, resultq)) for x in range(cores)]
+        for job in jobs:
+            job.start()
+        
+        #Sending too small of a job still causes issues with performance.    
+        n = len(res['shapes'])
+        starts = range(0,n,n/cores*2)
+        ends = starts[1:]
+        ends.append(n)        
+        offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]
     
-    '''PARALLEL CODE'''
-    t6 = time.time()
-    cores = 2
-    #Create a joinable queue from which to draw cells and a solution queue to get results
-    q = mp.JoinableQueue()
-    resultq = mp.Queue()
+        #Load the work into the queue
+        #As the jobs are loaded, they start, so we avoid some of the packing overhead.
+        for i in offsets:
+            args = []
+            args.append(res['potential_neighbors'])
+            args.append(res['shapes'])
+            args.append(i)
+            #args.append(weight_type='Queen')
+            q.put(args)
+        
+        #Load a poison pill into the queue to kill the children when work is done
+        for i in range(cores):
+            q.put(None)    
     
-    #Start up a number of child workers equal to the number of cores
-    #This is a great way to manage a web service.
-    jobs = [mp.Process(target=pcheck_joins2, args=(q, resultq)) for x in range(cores)]
-    for job in jobs:
-        job.start()
-    
-    #Sending too small of a job still causes issues with performance.    
-    n = len(res['shapes'])
-    starts = range(0,n,n/cores) #I do not think this balances well though, a higher number would be better, ie cores*2
-    ends = starts[1:]
-    ends.append(n)        
-    offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]
-
-    #Load the work into the queue
-    #As the jobs are loaded, they start, so we avoid some of the packing overhead.
-    for i in offsets:
-        args = []
-        args.append(res['potential_neighbors'])
-        args.append(res['shapes'])
-        args.append(i)
-        #args.append(weight_type='Queen')
-        q.put(args)
-    
-    #Load a poison pill into the queue to kill the children when work is done
-    for i in range(cores):
-        q.put(None)    
-
-    results = []
-    for i in range(len(offsets)):
-        results.append(resultq.get())
-    t7 = time.time()
-    
-    ddict = defaultdict(set)
-    for d in (results):
-        for key, value in d.items():
-            for v in value:
-                ddict[key].add(v)
-    t8 = time.time()
-    #This shows that doing a straight update on a master dict will not work.
-    #cnt = 0
-    #for i in range(len(results)):
-        #cnt += len(results[i])
-    #print cnt
-    
-    print "MP using Process and a queue (unmanaged): {}".format(t8-t6)
-    #print "Combining results took {} seconds".format(t8-t7)
-    print "Are the results the same? {}".format(ddict == w)
-
-    if w != ddict:
-        keys = w.keys()
-        for key in keys:
-            if w[key] != ddict[key]:
-                print key, w[key], ddict[key] 
+        results = []
+        for i in range(len(offsets)):
+            results.append(resultq.get())
+        t7 = time.time()
+        
+        ddict = defaultdict(set)
+        for d in (results):
+            for key, value in d.items():
+                for v in value:
+                    ddict[key].add(v)
+        t8 = time.time()
+        
+ 
+        print "MP using Process: {}".format(t8-t6)
+        #print "Combining results took {} seconds".format(t8-t7)
+        print "Are the results the same? {}".format(ddict == w)
+        print
+        

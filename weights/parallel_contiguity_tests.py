@@ -5,6 +5,7 @@ from collections import defaultdict
 from itertools import combinations
 import multiprocessing as mp
 import time
+import itertools
 
 # delta to get buckets right
 DELTA = 0.000001
@@ -555,7 +556,6 @@ def async_apply_w_callback(res,w):
     ends = starts[1:]
     ends.append(n)        
     offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ] 
-    potential_neighbors = res['potential_neighbors']
     #apply_async with callback to handle recombination.
     for offset in offsets:
         pool.apply_async(pcheck_joina, args=(offset,res['potential_neighbors'],res['shapes'],), callback=callback_dict)
@@ -565,6 +565,104 @@ def async_apply_w_callback(res,w):
     t2 = time.time()
     print "Async Apply Time: {}".format(t2-t1)
     print "Are the results the same? {}".format(ddict == w)
+
+def check_joinb(iterable, weight_type='ROOK'):
+    polygon_ids = iterable[0]
+    potential_neighbors = iterable[1]
+    shapes = iterable[2]
+    
+    weight_type = weight_type.upper()
+    w = {}
+
+    if weight_type == 'QUEEN':
+        # check for a shared vertex
+        vertCache = {}
+        for polyId in polygon_ids:
+            iVerts = shapes[polyId].vertices
+            nbrs = potential_neighbors[polyId]
+            if polyId not in vertCache:
+                vertCache[polyId] = set(iVerts)
+            if polyId not in w:
+                w[polyId] = []
+            for j in nbrs:
+                join = False
+                if j not in vertCache:
+                    vertCache[j] = set(shapes[j].vertices)
+                common = vertCache[polyId].intersection(vertCache[j])
+                if len(common) > 0:
+                    join = True
+                if join:
+                    w[polyId].add(j)
+                    if j not in w:
+                        w[j] = set()
+                    w[j].add(polyId)
+        return w
+    elif weight_type == 'ROOK':
+        # check for a shared edge
+        edgeCache = {}
+        for polyId in polygon_ids:
+            if polyId not in edgeCache:
+                iEdges ={}
+                iVerts = shapes[polyId].vertices
+                nv = len(iVerts)
+                ne = nv - 1
+                for i in range(ne):
+                    l = iVerts[i]
+                    r = iVerts[i+1]
+                    iEdges[(l,r)] = []
+                    iEdges[(r,l)] = []
+                edgeCache[polyId] = iEdges
+            nbrs = potential_neighbors[polyId]
+            if polyId not in w:
+                w[polyId] = []           
+            for j in nbrs:
+                join = False
+                if j not in edgeCache:
+                    jVerts = shapes[j].vertices
+                    jEdges = {}
+                    nv = len(jVerts)
+                    ne = nv - 1
+                    for e in range(ne):
+                        l = jVerts[e]
+                        r = jVerts[e+1]
+                        jEdges[(l,r)] = []
+                        jEdges[(r,l)] = []
+                    edgeCache[j] = jEdges
+                for edge in edgeCache[j]:
+                    if edge in edgeCache[polyId]:
+                        join = True
+                        d = w[polyId]
+                        d.append(j)
+                        w[polyId] = d
+                        if j not in w:
+                            w[j] = []                       
+                        k = w[j]
+                        k.append(polyId)
+                        w[j] = k
+                        break
+        return w
+    else:
+        print 'unsupported weight type'
+        return None        
+
+def pool_map(res, w):
+    t9 = time.time()
+    cores = mp.cpu_count()
+    pool = mp.Pool(cores)
+    iterable = []
+    #Get offsets
+    n = len(res['shapes'])
+    starts = range(0,n,n/cores)
+    ends = starts[1:]
+    ends.append(n)        
+    offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]    
+    for offset in offsets:
+        iterable.append([offset, res['potential_neighbors'], res['shapes']])
+    results = [pool.map(check_joinb, iterable)]
+ 
+    t10 = time.time()
+    print "Map Required: {}".format(t10-t9)
+    
     
 if __name__ == "__main__":
 
@@ -590,4 +688,5 @@ if __name__ == "__main__":
         time.sleep(2)
         async_apply_w_callback(res, w)
         time.sleep(2)
+        pool_map(res, w)
         print 

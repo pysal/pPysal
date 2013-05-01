@@ -304,7 +304,7 @@ def joinable_queue(res,w):
     #print "Spawned processes {}".format(tc-tb)
     
     n = len(res['shapes'])
-    starts = range(0,n,n/10)
+    starts = range(0,n,n/cores)
     ends = starts[1:]
     ends.append(n)        
     offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]
@@ -338,9 +338,12 @@ def joinable_queue(res,w):
             for v in value:
                 ddict[key].add(v)
     tg = time.time()
+    for job in jobs:
+        job.join()
     #print "Joining results {}".format(tg-tf)
     t8 = time.time()
-            
+    for job in jobs:
+        job.join()        
      
     print "Joinable Queue Time: {}".format(t8-t6)
     print "Are the results the same? {}".format(ddict == w)   
@@ -580,10 +583,11 @@ if __name__ == "__main__":
         print 'SERIAL TIME: ', str(t3-t2)   
         
         '''PARALLEL CODE'''
+        time.sleep(2)
         joinable_queue(res, w)
-        
+        time.sleep(2)
         managed_dict(res, w)
-        
+        time.sleep(2)
         async_apply_w_callback(res, w)
-        
+        time.sleep(2)
         print 

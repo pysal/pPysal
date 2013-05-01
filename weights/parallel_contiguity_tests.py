@@ -180,21 +180,188 @@ def check_joins(potential_neighbors, shapes, weight_type='ROOK',
         print 'unsupported weight type'
         return None
 
-def pcheck_joins2(q,resultq, weight_type='ROOK'):
-    pid=mp.current_process()._identity[0]
-    while True:
-        work = q.get()
-        if work == None:
-            #print "Got the pill."
+
+
+def bbcommon(bb, bbother):
+            """
+            Checks for overlaps of bounding boxes. First, east-west, then north-south.
+            Element 0 is west, element 2 is east, element 1 is north, element 3 is
+            south
+            All four checks must be false for chflag to be true, meaning the two
+            bounding boxes do not overlap.
+            """
+            chflag = 0
+            if not ((bbother[2] < bb[0]) or (bbother[0] > bb[2])):
+                if not ((bbother[3] < bb[1]) or (bbother[1] > bb[3])):
+                    chflag = 1
+            return chflag
+
+def joinable_queue(res,w):
+    
+    def pcheck_joins2(q,resultq, weight_type='ROOK'):
+        while True:
+            work = q.get()
+            if work == None:
+                #print "Got the pill."
+                q.task_done()
+                break
+            #Unpack the args from q
+            potential_neighbors = work[0]
+            shapes = work[1]
+            polygon_ids = work[2]
+            mdict = {}
+            weight_type = weight_type.upper()
+            #print "Process {} working on polygons {} - {}.".format(pid, polygon_ids[0], polygon_ids[-1])
+            if weight_type == 'QUEEN':
+                # check for a shared vertex
+                vertCache = {}
+                for polyId in polygon_ids:
+                    iVerts = shapes[polyId].vertices
+                    nbrs = potential_neighbors[polyId]
+                    if polyId not in vertCache:
+                        vertCache[polyId] = set(iVerts)
+                    if polyId not in w:
+                        w[polyId] = set()
+                    for j in nbrs:
+                        join = False
+                        if j not in vertCache:
+                            vertCache[j] = set(shapes[j].vertices)
+                        common = vertCache[polyId].intersection(vertCache[j])
+                        if len(common) > 0:
+                            join = True
+                        if join:
+                            w[polyId].add(j)
+                            if j not in w:
+                                w[j] = set()
+                            w[j].add(polyId)
+                return w
+            elif weight_type == 'ROOK':
+                # check for a shared edge
+                edgeCache = {}
+                
+                for polyId in polygon_ids:
+                    if polyId not in edgeCache:
+                        iEdges ={}
+                        iVerts = shapes[polyId].vertices
+                        nv = len(iVerts)
+                        ne = nv - 1
+                        for i in range(ne):
+                            l = iVerts[i]
+                            r = iVerts[i+1]
+                            iEdges[(l,r)] = []
+                            iEdges[(r,l)] = []
+                        edgeCache[polyId] = iEdges
+                    nbrs = potential_neighbors[polyId]
+                    if polyId not in mdict:
+                        mdict[polyId] = []           
+                    for j in nbrs:
+                        join = False
+                        if j not in edgeCache:
+                            jVerts = shapes[j].vertices
+                            jEdges = {}
+                            nv = len(jVerts)
+                            ne = nv - 1
+                            for e in range(ne):
+                                l = jVerts[e]
+                                r = jVerts[e+1]
+                                jEdges[(l,r)] = []
+                                jEdges[(r,l)] = []
+                            edgeCache[j] = jEdges
+                        for edge in edgeCache[j]:
+                            if edge in edgeCache[polyId]:
+                                join = True
+                                d = mdict[polyId]
+                                d.append(j)
+                                mdict[polyId] = d
+                                if j not in mdict:
+                                    mdict[j] = []                       
+                                k = mdict[j]
+                                k.append(polyId)
+                                mdict[j] = k
+                                break
+            #Put the resultant dict back into the queue and alert that the work is done.           
+            resultq.put(mdict)
             q.task_done()
-            break
-        #Unpack the args from q
-        potential_neighbors = work[0]
-        shapes = work[1]
-        polygon_ids = work[2]
-        mdict = {}
+        return  
+    
+    t6 = time.time()
+    cores = mp.cpu_count()
+    #print 
+    #print "Managed Queue"
+    #cores = 2
+    #Create a joinable queue from which to draw cells and a solution queue to get results
+    ta = time.time()
+    q = mp.JoinableQueue()
+    resultq = mp.Queue()
+    tb = time.time()
+    #print "Made queues {}.".format(tb-ta)
+    #Start up a number of child workers equal to the number of cores
+    #This is a great way to manage a web service.
+    jobs = [mp.Process(target=pcheck_joins2, args=(q, resultq)) for x in range(cores)]
+    for job in jobs:
+        job.start()
+    tc = time.time()
+    #print "Spawned processes {}".format(tc-tb)
+    
+    n = len(res['shapes'])
+    starts = range(0,n,n/10)
+    ends = starts[1:]
+    ends.append(n)        
+    offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]
+    td = time.time()
+    #print "Computing offsets {} ".format(td-tc)
+    #Load the work into the queue
+    #As the jobs are loaded, they start, so we avoid some of the packing overhead.
+    for i in offsets:
+        args = []
+        args.append(res['potential_neighbors'])
+        args.append(res['shapes'])
+        args.append(i)
+        #args.append(weight_type='Queen')
+        q.put_nowait(args)
+    te = time.time()
+    #print "Putting work on queue: {}".format(te-td)
+    #Load a poison pill into the queue to kill the children when work is done
+    for i in range(cores):
+        q.put_nowait(None)    
+    
+    results = []
+    for i in range(len(offsets)):
+        results.append(resultq.get())
+    t7 = time.time()
+    #tf = time.time()
+    #print "Getting work off queue, i.e. processing done {}".format(tf-te)
+    
+    ddict = defaultdict(set)
+    for d in (results):
+        for key, value in d.items():
+            for v in value:
+                ddict[key].add(v)
+    tg = time.time()
+    #print "Joining results {}".format(tg-tf)
+    t8 = time.time()
+            
+     
+    print "Joinable Queue Time: {}".format(t8-t6)
+    print "Are the results the same? {}".format(ddict == w)   
+
+def managed_dict(res, w):
+    
+    def pcheck_joins(potential_neighbors, shapes, mdict,x,step, weight_type='ROOK',
+            polygon_ids = []):
+    
+        #PolyId Setup
+        polygon_ids = range(x, x+step)
+        
+        if x+step > len(shapes):
+            polygon_ids = range(x, len(shapes))
+            
+        #w = {}
         weight_type = weight_type.upper()
-        #print "Process {} working on polygons {} - {}.".format(pid, polygon_ids[0], polygon_ids[-1])
+    
+        if not polygon_ids:
+            polygon_ids = xrange(len(shapes))
+    
         if weight_type == 'QUEEN':
             # check for a shared vertex
             vertCache = {}
@@ -215,7 +382,7 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
                     if join:
                         w[polyId].add(j)
                         if j not in w:
-                            w[j] = set()
+                            w[j] = []
                         w[j].add(polyId)
             return w
         elif weight_type == 'ROOK':
@@ -235,7 +402,7 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
                     edgeCache[polyId] = iEdges
                 nbrs = potential_neighbors[polyId]
                 if polyId not in mdict:
-                    mdict[polyId] = []           
+                    mdict[polyId] = set()           
                 for j in nbrs:
                     join = False
                     if j not in edgeCache:
@@ -253,96 +420,170 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
                         if edge in edgeCache[polyId]:
                             join = True
                             d = mdict[polyId]
-                            d.append(j)
+                            d.add(j)
                             mdict[polyId] = d
                             if j not in mdict:
-                                mdict[j] = []                       
+                                mdict[j] = set()                        
                             k = mdict[j]
-                            k.append(polyId)
+                            k.add(polyId)
                             mdict[j] = k
                             break
-        #Put the resultant dict back into the queue and alert that the work is done.           
-        resultq.put(mdict)
-        q.task_done()
-    return
+        else:
+            print 'unsupported weight type'
+            return None    
 
-def bbcommon(bb, bbother):
-            """
-            Checks for overlaps of bounding boxes. First, east-west, then north-south.
-            Element 0 is west, element 2 is east, element 1 is north, element 3 is
-            south
-            All four checks must be false for chflag to be true, meaning the two
-            bounding boxes do not overlap.
-            """
-            chflag = 0
-            if not ((bbother[2] < bb[0]) or (bbother[0] > bb[2])):
-                if not ((bbother[3] < bb[1]) or (bbother[1] > bb[3])):
-                    chflag = 1
-            return chflag
+    t1 = time.time()
+    cores = mp.cpu_count()
+    pool = mp.Pool()    
+    
+    
+    #mp test using a managed dict
+    step = len(res['shapes']) / cores
+    manager = mp.Manager()
+    mdict = manager.dict() #The w
+    for x in range(len(res['shapes'])):
+        mdict[x] = set()
+    jobs = [pool.Process(target=pcheck_joins, args=(res['potential_neighbors'], res['shapes'],mdict,x,step)) for x in range(0,len(res['shapes']), len(res['shapes'])/cores)]
+    for job in jobs:
+        job.start()
+    for job in jobs:
+        job.join()
+    t2 = time.time()
+    print "Managed Dict Time: {}".format(t2-t1)
+    print "Are the results the same? {}".format(mdict == w)
+    
+def pcheck_joina(polygon_ids, potential_neighbors, shapes, weight_type='ROOK'):
+
+    '''Can not be nested for apply_async'''
         
+    weight_type = weight_type.upper()
+    w = {}
+
+    if weight_type == 'QUEEN':
+        # check for a shared vertex
+        vertCache = {}
+        for polyId in polygon_ids:
+            iVerts = shapes[polyId].vertices
+            nbrs = potential_neighbors[polyId]
+            if polyId not in vertCache:
+                vertCache[polyId] = set(iVerts)
+            if polyId not in w:
+                w[polyId] = []
+            for j in nbrs:
+                join = False
+                if j not in vertCache:
+                    vertCache[j] = set(shapes[j].vertices)
+                common = vertCache[polyId].intersection(vertCache[j])
+                if len(common) > 0:
+                    join = True
+                if join:
+                    w[polyId].add(j)
+                    if j not in w:
+                        w[j] = set()
+                    w[j].add(polyId)
+        return w
+    elif weight_type == 'ROOK':
+        # check for a shared edge
+        edgeCache = {}
+        for polyId in polygon_ids:
+            if polyId not in edgeCache:
+                iEdges ={}
+                iVerts = shapes[polyId].vertices
+                nv = len(iVerts)
+                ne = nv - 1
+                for i in range(ne):
+                    l = iVerts[i]
+                    r = iVerts[i+1]
+                    iEdges[(l,r)] = []
+                    iEdges[(r,l)] = []
+                edgeCache[polyId] = iEdges
+            nbrs = potential_neighbors[polyId]
+            if polyId not in w:
+                w[polyId] = []           
+            for j in nbrs:
+                join = False
+                if j not in edgeCache:
+                    jVerts = shapes[j].vertices
+                    jEdges = {}
+                    nv = len(jVerts)
+                    ne = nv - 1
+                    for e in range(ne):
+                        l = jVerts[e]
+                        r = jVerts[e+1]
+                        jEdges[(l,r)] = []
+                        jEdges[(r,l)] = []
+                    edgeCache[j] = jEdges
+                for edge in edgeCache[j]:
+                    if edge in edgeCache[polyId]:
+                        join = True
+                        d = w[polyId]
+                        d.append(j)
+                        w[polyId] = d
+                        if j not in w:
+                            w[j] = []                       
+                        k = w[j]
+                        k.append(polyId)
+                        w[j] = k
+                        break
+        return w
+    else:
+        print 'unsupported weight type'
+        return None     
+
+
+def async_apply_w_callback(res,w): 
+    ddict = defaultdict(set)
+   
+    def callback_dict(w):
+        for key, value in w.items():
+            for v in value:
+                ddict[key].add(v)     
+
+        
+    '''Start'''                
+    t1 = time.time()
+    #Get a core count.  On a server we can specifiy a max number of cores.
+    cores = mp.cpu_count()
+    pool = mp.Pool(cores)
+    
+    #Get offsets
+    n = len(res['shapes'])
+    starts = range(0,n,n/cores)
+    ends = starts[1:]
+    ends.append(n)        
+    offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ] 
+    potential_neighbors = res['potential_neighbors']
+    #apply_async with callback to handle recombination.
+    for offset in offsets:
+        pool.apply_async(pcheck_joina, args=(offset,res['potential_neighbors'],res['shapes'],), callback=callback_dict)
+    pool.close()
+    pool.join()
+    
+    t2 = time.time()
+    print "Async Apply Time: {}".format(t2-t1)
+    print "Are the results the same? {}".format(ddict == w)
+    
 if __name__ == "__main__":
 
     fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
+
     for fname in fnames:
- 
+        res = bin_shapefile('TestData/'+fname)
+        
         '''Optimized Serial Code'''
         t2 = time.time()
-        res = bin_shapefile('TestData/'+fname)
         w = check_joins(res['potential_neighbors'], res['shapes'])
         t3 = time.time()
+        print
+        print "****ITERATION****"
         print str(fname)
-        print 'time refactored prior to parallelization: ', str(t3-t2)   
+        print 'SERIAL TIME: ', str(t3-t2)   
         
         '''PARALLEL CODE'''
-        t6 = time.time()
-        res = bin_shapefile('TestData/'+fname)
-        cores = mp.cpu_count()
-        #Create a joinable queue from which to draw cells and a solution queue to get results
-        q = mp.JoinableQueue()
-        resultq = mp.Queue()
+        joinable_queue(res, w)
         
-        #Start up a number of child workers equal to the number of cores
-        #This is a great way to manage a web service.
-        jobs = [mp.Process(target=pcheck_joins2, args=(q, resultq)) for x in range(cores)]
-        for job in jobs:
-            job.start()
+        managed_dict(res, w)
         
-        #Sending too small of a job still causes issues with performance.    
-        n = len(res['shapes'])
-        starts = range(0,n,n/cores*2)
-        ends = starts[1:]
-        ends.append(n)        
-        offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]
-    
-        #Load the work into the queue
-        #As the jobs are loaded, they start, so we avoid some of the packing overhead.
-        for i in offsets:
-            args = []
-            args.append(res['potential_neighbors'])
-            args.append(res['shapes'])
-            args.append(i)
-            #args.append(weight_type='Queen')
-            q.put(args)
+        async_apply_w_callback(res, w)
         
-        #Load a poison pill into the queue to kill the children when work is done
-        for i in range(cores):
-            q.put(None)    
-    
-        results = []
-        for i in range(len(offsets)):
-            results.append(resultq.get())
-        t7 = time.time()
-        
-        ddict = defaultdict(set)
-        for d in (results):
-            for key, value in d.items():
-                for v in value:
-                    ddict[key].add(v)
-        t8 = time.time()
-        
- 
-        print "MP using Process: {}".format(t8-t6)
-        #print "Combining results took {} seconds".format(t8-t7)
-        print "Are the results the same? {}".format(ddict == w)
-        print
-        
+        print 

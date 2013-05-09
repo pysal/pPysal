@@ -3,6 +3,7 @@ from binning import bin_shapefile, bbcommon
 from collections import defaultdict
 import multiprocessing as mp
 import time
+import sys
 
 def pcheck_joins2(q,resultq, weight_type='ROOK'):
     while True:
@@ -13,8 +14,7 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
             break
         
         #Unpack the args from q
-        polygon_ids = work[0]
-        
+        polygon_ids = work
         mdict = {}
         weight_type = weight_type.upper()
         if weight_type == 'ROOK':
@@ -66,16 +66,14 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
         q.task_done()
     return 
 
-def joinable_queue(res): 
+def joinable_queue(res,cores): 
     
     t1 = time.time()
-    cores = mp.cpu_count()
+    #cores = mp.cpu_count()
 
     #Create a joinable queue from which to draw cells and a solution queue to get results
-    ta = time.time()
     q = mp.JoinableQueue()
     resultq = mp.Queue()
-    tb = time.time()
 
     #Start up a number of child workers equal to the number of cores
     #This is a great way to manage a web service.
@@ -88,14 +86,10 @@ def joinable_queue(res):
     ends = starts[1:]
     ends.append(n)        
     offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]
-    td = time.time()
     
     #As the jobs are loaded, they start, so we avoid some of the packing overhead.
     for i in offsets:
-        args = []
-        args.append(i)
-        q.put_nowait(args)
-    te = time.time()
+        q.put_nowait(i)
 
     #Load a poison pill into the queue to kill the children when work is done
     for i in range(cores):
@@ -119,7 +113,8 @@ def joinable_queue(res):
 
 if __name__ == "__main__":
 
-    print "This version uses a joinable processing queue."
+    cores = int(sys.argv[1])
+    print "This version uses a joinable processing queue and {} cores.".format(cores)
     
     fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
     
@@ -129,7 +124,6 @@ if __name__ == "__main__":
         global potential_neighbors 
         shapes = res['shapes']
         potential_neighbors = res['potential_neighbors']   
-        
-        t = joinable_queue(res)
+        t = joinable_queue(res,cores)
         
         print "{} required {} seconds.".format(fname, t)

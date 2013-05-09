@@ -5,6 +5,7 @@ from binning import bin_shapefile, bbcommon
 from collections import defaultdict
 import multiprocessing as mp
 import time
+import sys
 
 def pcheck_joins(mdict,x,step, weight_type='ROOK',polygon_ids = []):
 
@@ -66,11 +67,11 @@ def pcheck_joins(mdict,x,step, weight_type='ROOK',polygon_ids = []):
         print 'unsupported weight type'
         return None 
 
-def managed_dict(res):   
+def managed_dict(res,cores):   
 
     t1 = time.time()
-    cores = mp.cpu_count()
-    pool = mp.Pool()    
+    #cores = mp.cpu_count()
+    pool = mp.Pool(cores)    
     
     step = len(res['shapes']) / cores
     manager = mp.Manager()
@@ -90,7 +91,8 @@ def managed_dict(res):
 
 if __name__ == "__main__":
 
-    print "This version uses a managed dictionary."
+    cores = int(sys.argv[1])
+    print "This version uses a managed dictionary using {} cores.".format(cores)
     
     fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
     
@@ -101,6 +103,6 @@ if __name__ == "__main__":
         shapes = res['shapes']
         potential_neighbors = res['potential_neighbors']   
         
-        t = managed_dict(res)
+        t = managed_dict(res,cores)
         
         print "{} required {} seconds.".format(fname, t)

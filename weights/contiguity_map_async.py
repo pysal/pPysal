@@ -5,6 +5,7 @@ from binning import bin_shapefile, bbcommon
 from collections import defaultdict
 import multiprocessing as mp
 import time
+import sys
 
 def check_joinb(iterable, weight_type='ROOK'):
     
@@ -61,9 +62,9 @@ def check_joinb(iterable, weight_type='ROOK'):
         print 'unsupported weight type'
         return None 
 
-def pool_map(res):
+def pool_map(res,cores):
     t9 = time.time()
-    cores = mp.cpu_count()
+    #cores = mp.cpu_count()
     ddict = defaultdict(set)
     
     def callback_dict_map(w):
@@ -96,7 +97,8 @@ def pool_map(res):
 
 if __name__ == "__main__":
 
-    print "This version uses map_async with a callback function."
+    cores = int(sys.argv[1])
+    print "This version uses map_async with a callback function and {} cores.".format(cores)
 
     fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
     
@@ -107,6 +109,6 @@ if __name__ == "__main__":
         shapes = res['shapes']
         potential_neighbors = res['potential_neighbors']   
         
-        t = pool_map(res)
+        t = pool_map(res,cores)
         
         print "{} required {} seconds.".format(fname, t)

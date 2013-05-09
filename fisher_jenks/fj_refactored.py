@@ -130,7 +130,8 @@ def fisher_jenks(values, classes=5, sort=True):
     
     #Calculate the number of cores over which to multiprocess
     cores = multiprocessing.cpu_count()
-    cores *= 2
+    if cores > len(values):
+	cores = len(values)
     step = numVal // cores
 
     t0 = time.time()

@@ -51,6 +51,7 @@ def get_bbox(offset,shpRows, shapes, minbox, binWidth):
         shpObj = shpRows[i]
         bbcache[i] = shpObj.bounding_box[:]
         shapes[i] = shpObj
+        print shapes[i]
         projBBox = [int((shpObj.bounding_box[:][j] -
                          minbox[j]) / binWidth[j]) for j in xrange(4)]
     
@@ -61,6 +62,28 @@ def get_bbox(offset,shpRows, shapes, minbox, binWidth):
             rows[j].add(i)
             poly2Row[i].add(j) 
     return [poly2Column, poly2Row,columns, rows, bbcache ]
+
+def intersect(offset,poly2Row,poly2Column,rows_cb,columns_cb,bbox_cb):
+    w = {}
+    for polyId in offset:
+        idRows = poly2Row[polyId]
+        idCols = poly2Column[polyId]
+        rowPotentialNeighbors = set()
+        colPotentialNeighbors = set()
+        for row in idRows:
+            rowPotentialNeighbors = rowPotentialNeighbors.union(rows_cb[row])
+        for col in idCols:
+            colPotentialNeighbors = colPotentialNeighbors.union(
+                columns_cb[col])
+        potentialNeighbors = rowPotentialNeighbors.intersection(
+            colPotentialNeighbors)
+        if polyId not in w:
+            w[polyId] = set()
+        for j in potentialNeighbors:
+            if polyId < j:
+                if bbcommon(bbox_cb[polyId], bbox_cb[j]):
+                    w[polyId].add(j)  
+    return w
 
 #Callback setup here.
 poly2Column = {}
@@ -82,13 +105,17 @@ def bbox_callback(r):
             rows_cb[key].add(v)   
     #bbcache
     bbox_cb.update(r[4])
+
+neighbors = {}
+def intersect_callback(w):
+    neighbors.update(w)
     
 def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
     
     shpFileObject = pysal.open(shpFile)
 
-    if shpFileObject.type != pysal.cg.Polygon: #This is really slow...
-        return False
+    #if shpFileObject.type != pysal.cg.Polygon: #This is really slow...
+        #return False
 
     shapebox = shpFileObject.bbox      # bounding box
 
@@ -142,30 +169,38 @@ def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
 
     # loop over polygons rather than bins
     #The union calls are what is really slow here.
-    w = {}
-
-    #Parallelize the intersection here.
-    for polyId in xrange(numPoly):
-        idRows = poly2Row[polyId]
-        idCols = poly2Column[polyId]
-        rowPotentialNeighbors = set()
-        colPotentialNeighbors = set()
-        for row in idRows:
-            rowPotentialNeighbors = rowPotentialNeighbors.union(rows[row])
-        for col in idCols:
-            colPotentialNeighbors = colPotentialNeighbors.union(
-                columns[col])
-        potentialNeighbors = rowPotentialNeighbors.intersection(
-            colPotentialNeighbors)
-        if polyId not in w:
-            w[polyId] = set()
-        for j in potentialNeighbors:
-            if polyId < j:
-                if bbcommon(bbcache[polyId], bbcache[j]):
-                    w[polyId].add(j)
+    #w = {}
     
+    pool = mp.Pool(cores)
+    
+    for offset in offsets:
+        pool.apply_async(intersect, args=(offset,poly2Row,poly2Column,rows_cb,columns_cb,bbox_cb), callback=intersect_callback)
+    pool.close()
+    pool.join()
+    
+    #Parallelize the intersection here.
+    #for polyId in xrange(numPoly):
+        #idRows = poly2Row[polyId]
+        #idCols = poly2Column[polyId]
+        #rowPotentialNeighbors = set()
+        #colPotentialNeighbors = set()
+        #for row in idRows:
+            #rowPotentialNeighbors = rowPotentialNeighbors.union(rows[row])
+        #for col in idCols:
+            #colPotentialNeighbors = colPotentialNeighbors.union(
+                #columns[col])
+        #potentialNeighbors = rowPotentialNeighbors.intersection(
+            #colPotentialNeighbors)
+        #if polyId not in w:
+            #w[polyId] = set()
+        #for j in potentialNeighbors:
+            #if polyId < j:
+                #if bbcommon(bbcache[polyId], bbcache[j]):
+                    #w[polyId].add(j)
+
+    print shapes
     results = {}
     results['n_polygons'] = numPoly
-    results['potential_neighbors'] = w
+    results['potential_neighbors'] = neighbors
     results['shapes'] = shapes
     return results

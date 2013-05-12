@@ -15,8 +15,6 @@ BUCK_SM = 8
 BUCK_LG = 80
 SHP_SMALL = 1000
 
-global shpFileObject
-
 
 def bbcommon(bb, bbother):
     """
@@ -51,7 +49,6 @@ def get_bbox(offset,shpRows, shapes, minbox, binWidth):
         shpObj = shpRows[i]
         bbcache[i] = shpObj.bounding_box[:]
         shapes[i] = shpObj
-        print shapes[i]
         projBBox = [int((shpObj.bounding_box[:][j] -
                          minbox[j]) / binWidth[j]) for j in xrange(4)]
     
@@ -61,7 +58,7 @@ def get_bbox(offset,shpRows, shapes, minbox, binWidth):
         for j in range(projBBox[1], projBBox[3] + 1):
             rows[j].add(i)
             poly2Row[i].add(j) 
-    return [poly2Column, poly2Row,columns, rows, bbcache ]
+    return [poly2Column, poly2Row,columns, rows, bbcache,shapes,offset]
 
 def intersect(offset,poly2Row,poly2Column,rows_cb,columns_cb,bbox_cb):
     w = {}
@@ -91,6 +88,7 @@ poly2Row = {}
 columns_cb = defaultdict(set)
 rows_cb = defaultdict(set)
 bbox_cb = {}
+shapes_cb = []
 
 def bbox_callback(r):
     poly2Column.update(r[0])
@@ -105,7 +103,10 @@ def bbox_callback(r):
             rows_cb[key].add(v)   
     #bbcache
     bbox_cb.update(r[4])
-
+    #shapes
+    offset = r[6]
+    shapes_cb.extend(r[5][offset[0]:offset[-1]+1])
+    
 neighbors = {}
 def intersect_callback(w):
     neighbors.update(w)
@@ -197,8 +198,8 @@ def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
             #if polyId < j:
                 #if bbcommon(bbcache[polyId], bbcache[j]):
                     #w[polyId].add(j)
-
-    print shapes
+    print len(shapes_cb)
+    exit()
     results = {}
     results['n_polygons'] = numPoly
     results['potential_neighbors'] = neighbors

@@ -7,7 +7,7 @@ import warnings
 #Suppress the divide by zero errors
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
-def fisher_jenks(values, classes=5, sort=True):
+def fisher_jenks(values, classes=5, cores=None, sort=True):
     '''Fisher-Jenks Optimal Partitioning of an ordered array into k classes
 
     Parameters
@@ -122,6 +122,9 @@ def fisher_jenks(values, classes=5, sort=True):
     
     if sort:
 	values.sort()
+    
+    if cores == None:
+	cores = multiprocessing.cpu_count()
 	
     numVal = len(values)
 
@@ -129,7 +132,6 @@ def fisher_jenks(values, classes=5, sort=True):
     pivotMat, k = allocate(values, classes)
     
     #Calculate the number of cores over which to multiprocess
-    cores = multiprocessing.cpu_count()
     if cores > len(values):
 	cores = len(values)
     step = numVal // cores

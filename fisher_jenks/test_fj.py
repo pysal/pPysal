@@ -13,7 +13,7 @@ for c in cores:
             try:
                 t1 = time.time()
                 #wrapped in try since we will blow out RAM at some point
-                classification = fisher_jenks(data, k)
+                classification = fisher_jenks(data, k, c)
                 t2 = time.time()
                 print "Processed {} data points in {} classes using {} cores.  Total time: {}".format(d, k, c, t2-t1)
             except:

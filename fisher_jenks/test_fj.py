@@ -1,6 +1,7 @@
-from fj_refactored import fisher_jenks
-import numpy
+import sys
 import time
+import numpy
+from fj_refactored import fisher_jenks
 
 cores = [1,2,4,16,32]
 classes = [5,6,7]
@@ -15,6 +16,9 @@ for c in cores:
                 #wrapped in try since we will blow out RAM at some point
                 classification = fisher_jenks(data, k, c)
                 t2 = time.time()
-                print "Processed {} data points in {} classes using {} cores.  Total time: {}".format(d, k, c, t2-t1)
+                print "Processed {0} data points in {1} classes using {2} cores. Total time: {3}".format(d, k, c, t2-t1)
+            except KeyboardInterrupt:
+                print "Aborting"
+                sys.exit(1)
             except:
-                print "FAILURE: {} Data Points.".format(d)
+                print "FAILURE: {0} data points.".format(d)

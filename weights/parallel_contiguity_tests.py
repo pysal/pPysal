@@ -346,8 +346,8 @@ def joinable_queue(res,w):
     for job in jobs:
         job.join()        
      
-    print "Joinable Queue Time: {}".format(t8-t6)
-    print "Are the results the same? {}".format(ddict == w)   
+    print "Joinable Queue Time: {0}".format(t8-t6)
+    print "Are the results the same? {0}".format(ddict == w)   
 
 def managed_dict(res, w):
     
@@ -453,8 +453,8 @@ def managed_dict(res, w):
     for job in jobs:
         job.join()
     t2 = time.time()
-    print "Managed Dict Time: {}".format(t2-t1)
-    print "Are the results the same? {}".format(mdict == w)
+    print "Managed Dict Time: {0}".format(t2-t1)
+    print "Are the results the same? {0}".format(mdict == w)
     
 def pcheck_joina(polygon_ids, potential_neighbors, shapes, weight_type='ROOK'):
 
@@ -563,8 +563,8 @@ def async_apply_w_callback(res,w):
     pool.join()
     
     t2 = time.time()
-    print "Async Apply Time: {}".format(t2-t1)
-    print "Are the results the same? {}".format(ddict == w)
+    print "Async Apply Time: {0}".format(t2-t1)
+    print "Are the results the same? {0}".format(ddict == w)
 
 def check_joinb(iterable, weight_type='ROOK'):
     polygon_ids = iterable[0]
@@ -661,7 +661,7 @@ def pool_map(res, w):
     results = [pool.map(check_joinb, iterable)]
  
     t10 = time.time()
-    print "Map Required: {}".format(t10-t9)
+    print "Map Required: {0}".format(t10-t9)
     
     
 if __name__ == "__main__":

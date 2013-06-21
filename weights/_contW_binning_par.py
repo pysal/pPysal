@@ -327,7 +327,7 @@ if __name__ == "__main__":
     for job in jobs:
         job.join()
     t5 = time.time()
-    print "MP using Process: {}".format(t5-t4)
+    print "MP using Process: {0}".format(t5-t4)
     
     print c.w == mdict
     

@@ -29,7 +29,7 @@ def pcheck_joina(polygon_ids, weight_type='ROOK'):
                 edgeCache[polyId] = iEdges
             nbrs = potential_neighbors[polyId]
             if polyId not in w:
-                w[polyId] = []           
+                w[polyId] = []
             for j in nbrs:
                 join = False
                 if j not in edgeCache:
@@ -50,7 +50,7 @@ def pcheck_joina(polygon_ids, weight_type='ROOK'):
                         d.append(j)
                         w[polyId] = d
                         if j not in w:
-                            w[j] = []                       
+                            w[j] = []
                         k = w[j]
                         k.append(polyId)
                         w[j] = k
@@ -58,16 +58,14 @@ def pcheck_joina(polygon_ids, weight_type='ROOK'):
         return w
     else:
         print 'unsupported weight type'
-        return None     
+        return None
 
-
-def async_apply_w_callback(res,cores): 
-    
+def async_apply_w_callback(res,cores):
     ddict = defaultdict(set)
     def callback_dict(w):
         for key, value in w.items():
             for v in value:
-                ddict[key].add(v)     
+                ddict[key].add(v)
     
     t1 = time.time()
     #cores = mp.cpu_count()
@@ -77,8 +75,8 @@ def async_apply_w_callback(res,cores):
     n = len(res['shapes'])
     starts = range(0,n,n/cores)
     ends = starts[1:]
-    ends.append(n)        
-    offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ] 
+    ends.append(n)
+    offsets = [ range(z[0],z[1]) for z in zip(starts, ends) ]
 
     for offset in offsets:
         pool.apply_async(pcheck_joina, args=(offset,), callback=callback_dict)
@@ -90,19 +88,18 @@ def async_apply_w_callback(res,cores):
     return (t2 - t1)
 
 if __name__ == "__main__":
-
     cores = int(sys.argv[1])
-    print "This version uses apply_async with a callback function and {} cores.".format(cores)
+    print "This version uses apply_async with a callback function and {0} cores.".format(cores)
     
     fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
     
     for fname in fnames:
         res = bin_shapefile('TestData/'+fname)
         global shapes
-        global potential_neighbors 
+        global potential_neighbors
         shapes = res['shapes']
-        potential_neighbors = res['potential_neighbors']   
+        potential_neighbors = res['potential_neighbors']
         
         t = async_apply_w_callback(res,cores)
         
-        print "{} required {} seconds.".format(fname, t)
+        print "{0} required {1} seconds.".format(fname, t)

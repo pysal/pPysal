@@ -35,7 +35,7 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
                     edgeCache[polyId] = iEdges
                 nbrs = potential_neighbors[polyId]
                 if polyId not in mdict:
-                    mdict[polyId] = []           
+                    mdict[polyId] = []
                 for j in nbrs:
                     join = False
                     if j not in edgeCache:
@@ -56,7 +56,7 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
                             d.append(j)
                             mdict[polyId] = d
                             if j not in mdict:
-                                mdict[j] = []                       
+                                mdict[j] = []
                             k = mdict[j]
                             k.append(polyId)
                             mdict[j] = k
@@ -64,9 +64,8 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
         #Put the resultant dict back into the queue and alert that the work is done.           
         resultq.put(mdict)
         q.task_done()
-    return 
 
-def joinable_queue(res,cores): 
+def joinable_queue(res,cores):
     
     t1 = time.time()
     #cores = mp.cpu_count()
@@ -104,26 +103,27 @@ def joinable_queue(res,cores):
         for key, value in d.items():
             for v in value:
                 ddict[key].add(v)
+
     for job in jobs:
         job.join()
     for job in jobs:
-        job.join()        
+        job.join()
     t2 = time.time()
     return (t2 - t1)
 
 if __name__ == "__main__":
 
     cores = int(sys.argv[1])
-    print "This version uses a joinable processing queue and {} cores.".format(cores)
+    print "This version uses a joinable processing queue and {0} cores.".format(cores)
     
     fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
     
     for fname in fnames:
         res = bin_shapefile('TestData/'+fname)
         global shapes
-        global potential_neighbors 
+        global potential_neighbors
         shapes = res['shapes']
-        potential_neighbors = res['potential_neighbors']   
+        potential_neighbors = res['potential_neighbors']
         t = joinable_queue(res,cores)
         
-        print "{} required {} seconds.".format(fname, t)
+        print "{0} required {1} seconds.".format(fname, t)

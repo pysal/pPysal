@@ -10,13 +10,15 @@ driver = ogr.GetDriverByName("ESRI Shapefile")
 output_shapefiles = []
 sizes = [100]
 for size in sizes:
-    output = "{}x{}.shp".format(size, size)
-    output_shapefiles.append("{}x{}.shp".format(size, size))
+    output = "{0}x{0}.shp".format(size)
+    output_shapefiles.append("{0}x{0}.shp".format(size))
     if os.path.exists(output): 
         driver.DeleteDataSource(output)
     datasource = driver.CreateDataSource(output)
+
     if datasource is None:
         print "Could not create file."
+
     layer = datasource.CreateLayer(output, geom_type=ogr.wkbPolygon)
 
     #Create all the fields

@@ -98,7 +98,7 @@ def pool_map(res,cores):
 if __name__ == "__main__":
 
     cores = int(sys.argv[1])
-    print "This version uses map_async with a callback function and {} cores.".format(cores)
+    print "This version uses map_async with a callback function and {0} cores.".format(cores)
 
     fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
     
@@ -111,4 +111,4 @@ if __name__ == "__main__":
         
         t = pool_map(res,cores)
         
-        print "{} required {} seconds.".format(fname, t)
+        print "{0} required {1} seconds.".format(fname, t)

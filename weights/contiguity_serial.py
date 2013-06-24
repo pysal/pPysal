@@ -77,4 +77,4 @@ if __name__ == "__main__":
         
         t = check_joins()
         
-        print "{} required {} seconds.".format(fname, t)
+        print "{0} required {1} seconds.".format(fname, t)

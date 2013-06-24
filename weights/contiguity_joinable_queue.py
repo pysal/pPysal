@@ -64,6 +64,7 @@ def pcheck_joins2(q,resultq, weight_type='ROOK'):
         #Put the resultant dict back into the queue and alert that the work is done.           
         resultq.put(mdict)
         q.task_done()
+        return
 
 def joinable_queue(res,cores):
     

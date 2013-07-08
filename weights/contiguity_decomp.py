@@ -10,9 +10,9 @@ ncpus = len(client.ids)
 import pysal as ps
 import numpy as np
 
-#sf = ps.open(ps.examples.get_path("nat.shp"))
+sf = ps.open(ps.examples.get_path("nat.shp"))
 #sf = ps.open(ps.examples.get_path("columbus.shp"))
-sf = ps.open(ps.examples.get_path("sids2.shp"))
+#sf = ps.open(ps.examples.get_path("sids2.shp"))
 bb = sf.bbox
 
 
@@ -23,12 +23,14 @@ w = np.abs(w)
 bounds = np.arange(bb[0], bb[2]+w, w)[1:]
 bounds[-1] += 0.0001*w
 bins = {}
+ids = {} 
 for b in range(len(bounds)):
     bins[b] = []
+    ids[b] = []
 
 shps = []
 
-for shp in sf:
+for i,shp in enumerate(sf):
     shps.append(shp)
 
     bbi = shp.bounding_box
@@ -37,6 +39,8 @@ for shp in sf:
     bids = range(left, right+1)
     for bid in bids:
         bins[bid].append(shp)
+        ids[bid].append(i)
+
 
 
 #sf.close()
@@ -91,6 +95,20 @@ with client[:].sync_imports():
     from itertools import combinations
 results = view.map(bf_queen, bins.values())
 t2 = time.time()
-print 'Parallel: ', t2-t1
+
+#map process ids back to original ids
+neighbors = {}
+for i,result in enumerate(results.result):
+    neigh,c = result
+    for key in neigh:
+        idi = ids[i][key]
+        idjs = [ ids[i][j] for j in neigh[key]]
+        if idi not in neighbors:
+            neighbors[idi] = set(idjs)
+        else:
+            neighbors[idi] = neighbors[idi].union(set(idjs))
+
+t3 = time.time()
+print 'Parallel: ', t3-t1
 
 

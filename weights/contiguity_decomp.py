@@ -45,27 +45,29 @@ for i,shp in enumerate(sf):
 
 #sf.close()
 
-def bf_queen(shps):
+def bf_queen(shps, ids = []):
     n = len(shps)
     w = {}
     coords = {}
+    if not ids:
+        ids = xrange(n)
 
     for i in range(n-1):
         si = shps[i]
         vertsi = si.vertices
         for vi in vertsi:
             if vi not in coords:
-                coords[vi] = set([i])
+                coords[vi] = set([ids[i]])
             else:
-                coords[vi] = coords[vi].union(set([i]))
+                coords[vi] = coords[vi].union(set([ids[i]]))
         for j in range(i+1,n):
             sj = shps[j]
             vertsj = sj.vertices
             for vj in vertsj:
                 if vj not in coords:
-                    coords[vj] = set([j])
+                    coords[vj] = set([ids[j]])
                 else:
-                    coords[vj] = coords[vj].union(set([j]))
+                    coords[vj] = coords[vj].union(set([ids[j]]))
     for coord in coords:
         if len(coords[coord]) > 1:
             pairs = combinations(coords[coord],2)
@@ -93,7 +95,7 @@ t1 = time.time()
 view = client[0:-1]
 with client[:].sync_imports():
     from itertools import combinations
-results = view.map(bf_queen, bins.values())
+results = view.map(bf_queen, bins.values(), ids.values())
 t2 = time.time()
 
 #map process ids back to original ids
@@ -101,12 +103,10 @@ neighbors = {}
 for i,result in enumerate(results.result):
     neigh,c = result
     for key in neigh:
-        idi = ids[i][key]
-        idjs = [ ids[i][j] for j in neigh[key]]
-        if idi not in neighbors:
-            neighbors[idi] = set(idjs)
+        if key not in neighbors:
+            neighbors[key] = neigh[key]
         else:
-            neighbors[idi] = neighbors[idi].union(set(idjs))
+            neighbors[key] = neighbors[key].union(neigh[key])
 
 t3 = time.time()
 print 'Parallel: ', t3-t1

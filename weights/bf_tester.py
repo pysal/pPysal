@@ -106,8 +106,10 @@ def rf_shapefile(sf):
 if __name__ == '__main__':
 
     sf = ps.examples.get_path("columbus.shp")
-    queen = qf_shapefile(sf)
-    rook = rf_shapefile(sf)
+    queen_col = qf_shapefile(sf)
+    rook_col = rf_shapefile(sf)
+    wrc = ps.W(rook_col)
+    print wrc.histogram
 
     import time
     sf = ps.examples.get_path("nat.shp")

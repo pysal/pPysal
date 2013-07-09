@@ -1,3 +1,29 @@
+"""
+Contiguity builder using parallel binning check for queen
+
+start this from terminal with:
+    ipcluster start -n 4
+
+
+similar logic to that in contiguity_decomp_bf.py except in place of a brute
+force check in each of the cores we use a binning.
+
+Example run-times using 3 cores:
+
+Sequential:  0.504029989243
+importing combinations from itertools on engine(s)
+Parallel:  0.542127847672
+
+Versus bf:
+    
+Sequential:  183.793218851
+importing combinations from itertools on engine(s)
+Parallel:  54.3720309734
+
+"""
+_author_ = "Serge Rey <sjsrey@gmail.com>"
+
+
 from IPython.parallel import Client
 from itertools import combinations
 
@@ -53,9 +79,31 @@ for i,shp in enumerate(sf):
 
 
 
-#sf.close()
+sf.close()
 
 def binning(shps, bb, wttype="QUEEN", buckets = 8 , ids = []):
+    """
+    Contiguity builder for Queen (shared vertex)
+
+    Arguments
+    ---------
+    shps: list of pysal.cg.Polygon objects
+
+    bb: list of bounding box coordinates for the extent of the collection of
+    shps
+
+    wttype: string ("QUEEN" is default - only version working for now)
+
+    buckets: int number of columns (rows) for the binning
+
+    ids: list of ids associated with the shapes in shps
+
+    Returns
+    -------
+
+    neighbors: dict - key is id, value is a list of neighboring ids
+
+    """
 
 
     def bbcommon(bb, bbother):
@@ -206,45 +254,6 @@ def binning(shps, bb, wttype="QUEEN", buckets = 8 , ids = []):
 
     
 
-def bf_queen(shps, ids = []):
-
-    n = len(shps)
-    w = {}
-    coords = {}
-    if not ids:
-        ids = xrange(n)
-
-    for i in range(n-1):
-        si = shps[i]
-        vertsi = si.vertices
-        for vi in vertsi:
-            if vi not in coords:
-                coords[vi] = set([ids[i]])
-            else:
-                coords[vi] = coords[vi].union(set([ids[i]]))
-        for j in range(i+1,n):
-            sj = shps[j]
-            vertsj = sj.vertices
-            for vj in vertsj:
-                if vj not in coords:
-                    coords[vj] = set([ids[j]])
-                else:
-                    coords[vj] = coords[vj].union(set([ids[j]]))
-    for coord in coords:
-        if len(coords[coord]) > 1:
-            pairs = combinations(coords[coord],2)
-            for pair in pairs:
-                l,r = pair
-                if l not in w:
-                    w[l] = set([r])
-                else:
-                    w[l] = w[l].union(set([r]))
-                if r not in w:
-                    w[r] = set([l])
-                else:
-                    w[r] = w[r].union(set([l]))
-    return w, coords
-
 import time
 t1 = time.time()
 res = binning(shps, bb)
@@ -256,6 +265,8 @@ print 'Sequential: ',t2-t1
 t1 = time.time()
 WTTYPES = ["QUEEN"] * (ncpus - 1)
 BUCKETS = [8] * (ncpus - 1)
+# note that trying to pass in unique bbs/extents in the map raises errors. for
+# now we use the same extent for each mapping but this is inefficient
 BBS = [bb] * (ncpus - 1)
 view = client[0:-1]
 with client[:].sync_imports():

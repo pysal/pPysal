@@ -1,3 +1,26 @@
+"""
+Contiguity builder using brute force check for queen
+
+start this from terminal with:
+    ipcluster start -n 4
+
+This is to explore parallelization prior to a binning approach
+
+The idea here is to first subdivide the extent into ncp-1 regions, (where ncp
+is number of compute units), find the shapes who have bounding boxes that are
+in or overlap each region and then farm out a check for contiguity between the
+pairs of shapes within each region (i.e., each core gets a region). then we
+recombine after returning from the mapping.
+
+Example run-times using 3 cores:
+
+Sequential:  183.793218851
+importing combinations from itertools on engine(s)
+Parallel:  54.3720309734
+
+"""
+_author_ = "Serge Rey <sjsrey@gmail.com>"
+
 from IPython.parallel import Client
 from itertools import combinations
 
@@ -43,9 +66,28 @@ for i,shp in enumerate(sf):
 
 
 
-#sf.close()
+sf.close()
 
 def bf_queen(shps, ids = []):
+    """
+    Brute force queen contiguity builder
+
+    Arguments
+    ---------
+
+    shps: a list of pysal cg.Polygons
+
+    ids: a list of integer ids for the shps
+
+
+    Returns
+
+    w: a dictionary with id as key and list of neighboring ids as values
+
+    coords: a dictionary with (x,y) as the key and the value is a list of ids
+    for shapes that have that (x,y) one or more times on their boundary
+
+    """
     n = len(shps)
     w = {}
     coords = {}

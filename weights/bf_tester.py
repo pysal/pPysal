@@ -41,46 +41,81 @@ def bf_contiguity(shps, wttype = "QUEEN"):
             si = set([i])
             for vertex in shp.vertices:
                 if vertex not in vertices:
-                    vertices[vertex] = si
-                else:
-                    vertices[vertex] = vertices[vertex].union(si)
+                    vertices[vertex] = set()
+                vertices[vertex] = vertices[vertex].union(si)
         for vertex in vertices:
             pairs = combinations(vertices[vertex], 2)
             for l,r in pairs:
                 if l not in neighbors:
-                    neighbors[l] = set([r])
+                    neighbors[l] = set()
                 if r not in neighbors:
-                    neighbors[r] = set([l])
+                    neighbors[r] = set()
                 neighbors[l] = neighbors[l].union([r])
                 neighbors[r] = neighbors[r].union([l])
         return neighbors
-
-    elif wttype.upper() == "ROOK":
-        # check for shared (non-directed) edges
-        edges = {}
+    elif wttype.upper() == 'ROOK':
+        vertices = {}
         for i, shp in enumerate(shps):
-            nvi = len(shp.vertices)
             si = set([i])
-            for oi in range(nvi-1):
-                for di in range(oi+1, nvi):
-                    edge = shp.vertices[oi], shp.vertices[di]
-                    if edge not in edges:
-                        edges[edge] = si
-                    twin = shp.vertices[di], shp.vertices[oi]
-                    edges[edge] = edges[edge].union(si)
-                    if twin not in edges:
-                        edges[twin] = si
-                    edges[twin] = edges[twin].union(si)
-        neighbors = {}
-        for edge in edges:
-            pairs = combinations(edges[edge], 2)
+            for vertex in shp.vertices:
+                if vertex not in vertices:
+                    vertices[vertex] = set()
+                vertices[vertex] = vertices[vertex].union(si)
+        checked = []
+        edges = {}
+        for vertex in vertices:
+            pairs = combinations(vertices[vertex], 2)
             for l,r in pairs:
                 if l not in neighbors:
-                    neighbors[l] = set([r])
+                    neighbors[l] = set()
                 if r not in neighbors:
-                    neighbors[r] = set([l])
-                neighbors[l] = neighbors[l].union([r])
-                neighbors[r] = neighbors[r].union([l])
+                    neighbors[r] = set()
+                lr = set([l,r])
+                if checked.count(lr) == 0:
+                    checked.append(lr)
+                    # check for shared edge
+                    vl = shps[l].vertices
+                    vr = shps[r].vertices
+                    vls = set(vl)
+                    vrs = set(vr)
+                    common = vls.intersection(vrs)
+                    if len(common) >= 2:
+                        # at least two vertices in common
+                        # now check for sequential positioning
+                        good_left = []
+                        for el in combinations(common, 2):
+                            # check left poly for an edge defined 
+                            o,d = el
+                            # how many times does point appear
+                            co = vl.count(o) 
+                            cd = vl.count(d)
+                            sc = 0
+                            for po in range(co):
+                                lo = vl.index(o, sc)
+                                sd = 0
+                                for pd in range(cd):
+                                    ld = vl.index(d, sd)
+                                    diff = np.abs(lo - ld)
+                                    sd = ld + 1
+                                    if diff == 1:
+                                        good_left.append(el)
+                                sc = lo + 1
+                        for el in good_left:
+                            o,d = el
+                            co = vr.count(o)
+                            cd = vr.count(d)
+                            sc = 0
+                            for po in range(co):
+                                ro = vr.index(o, sc)
+                                sd = 0
+                                for pd in range(cd):
+                                    rd = vr.index(d, sd)
+                                    diff = np.abs(ro - rd)
+                                    sd = rd + 1
+                                    if diff == 1:
+                                        neighbors[l] = neighbors[l].union(set([r]))
+                                        neighbors[r] = neighbors[r].union(set([l]))
+                                sc = ro + 1
         return neighbors
     else:
         print "Weight type not supported: ", wttype
@@ -122,3 +157,4 @@ if __name__ == '__main__':
     rook = rf_shapefile(sf)
     t2 = time.time()
     print "National rook: ", t2-t1
+

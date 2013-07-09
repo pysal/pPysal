@@ -98,7 +98,7 @@ with client[:].sync_imports():
 results = view.map(bf_queen, bins.values(), ids.values())
 t2 = time.time()
 
-#map process ids back to original ids
+# combine results
 neighbors = {}
 for i,result in enumerate(results.result):
     neigh,c = result

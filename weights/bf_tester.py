@@ -112,10 +112,22 @@ if __name__ == '__main__':
     sf = ps.examples.get_path("nat.shp")
     t1 = time.time()
     queen = qf_shapefile(sf)
+    wq = ps.W(queen)
     t2 = time.time()
     print "National queen: ", t2-t1
     sf = ps.examples.get_path("nat.shp")
     t1 = time.time()
     rook = rf_shapefile(sf)
+    wr = ps.W(rook)
     t2 = time.time()
     print "National rook: ", t2-t1
+
+    t1 = time.time()
+    wrps = ps.rook_from_shapefile(sf)
+    t2 = time.time()
+    print "PySAL rook: ", t2-t1
+
+    t1 = time.time()
+    wqps = ps.queen_from_shapefile(sf)
+    t2 = time.time()
+    print "PySAL queen: ", t2-t1

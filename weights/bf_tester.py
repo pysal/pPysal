@@ -109,13 +109,13 @@ if __name__ == '__main__':
     print wrc.histogram
 
     import time
-    sf = ps.examples.get_path("nat.shp")
+    sf = ps.examples.get_path("NAT.shp")
     t1 = time.time()
     queen = qf_shapefile(sf)
     wq = ps.W(queen)
     t2 = time.time()
     print "National queen: ", t2-t1
-    sf = ps.examples.get_path("nat.shp")
+    sf = ps.examples.get_path("NAT.shp")
     t1 = time.time()
     rook = rf_shapefile(sf)
     wr = ps.W(rook)

@@ -16,19 +16,34 @@ from itertools import combinations
 #bb = sf.bbox
 
 
-def bf_contiguity(shpfile, wttype = "QUEEN"):
-    f = ps.open(shpfile)
+def bf_contiguity(shps, wttype = "QUEEN"):
+    """
+    Brute force contiguity builder
+
+    Arguments
+    ---------
+
+    shps: list of pysal.cg.Polygon shapes
+
+    wttype: string
+            contiguity type
+
+    Returns
+    -------
+    neighbors: dict
+               key is id, value is list of neighboring ids
+
+    """
     neighbors = {}
     if wttype.upper() == "QUEEN":
         vertices = {}
-        for i, shp in enumerate(f):
+        for i, shp in enumerate(shps):
             si = set([i])
             for vertex in shp.vertices:
                 if vertex not in vertices:
                     vertices[vertex] = si
                 else:
                     vertices[vertex] = vertices[vertex].union(si)
-        f.close()
         for vertex in vertices:
             pairs = combinations(vertices[vertex], 2)
             for l,r in pairs:
@@ -41,8 +56,9 @@ def bf_contiguity(shpfile, wttype = "QUEEN"):
         return neighbors
 
     elif wttype.upper() == "ROOK":
+        # check for shared (non-directed) edges
         edges = {}
-        for i, shp in enumerate(f):
+        for i, shp in enumerate(shps):
             nvi = len(shp.vertices)
             si = set([i])
             for oi in range(nvi-1):
@@ -56,7 +72,6 @@ def bf_contiguity(shpfile, wttype = "QUEEN"):
                         edges[twin] = si
                     edges[twin] = edges[twin].union(si)
         neighbors = {}
-        f.close()
         for edge in edges:
             pairs = combinations(edges[edge], 2)
             for l,r in pairs:
@@ -68,13 +83,40 @@ def bf_contiguity(shpfile, wttype = "QUEEN"):
                 neighbors[r] = neighbors[r].union([l])
         return neighbors
     else:
-        f.close()
         print "Weight type not supported: ", wttype
 
+
+def qf_shapefile(sf):
+    shps = []
+    f = ps.open(sf)
+    for shp in f:
+        shps.append(shp)
+    f.close()
+    return  bf_contiguity(shps, wttype = 'QUEEN')
+
+def rf_shapefile(sf):
+    shps = []
+    f = ps.open(sf)
+    for shp in f:
+        shps.append(shp)
+    f.close()
+    return  bf_contiguity(shps, wttype = 'ROOK')
 
 
 if __name__ == '__main__':
 
     sf = ps.examples.get_path("columbus.shp")
-    queen = bf_contiguity(sf, wttype='queen')
-    rook = bf_contiguity(sf, wttype="ROOK")
+    queen = qf_shapefile(sf)
+    rook = rf_shapefile(sf)
+
+    import time
+    sf = ps.examples.get_path("nat.shp")
+    t1 = time.time()
+    queen = qf_shapefile(sf)
+    t2 = time.time()
+    print "National queen: ", t2-t1
+    sf = ps.examples.get_path("nat.shp")
+    t1 = time.time()
+    rook = rf_shapefile(sf)
+    t2 = time.time()
+    print "National rook: ", t2-t1

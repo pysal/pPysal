@@ -36,7 +36,8 @@ ncpus = len(client.ids)
 import pysal as ps
 import numpy as np
 
-sf = ps.open(ps.examples.get_path("nat.shp"))
+sf = ps.open("1000x10.shp")
+#sf = ps.open(ps.examples.get_path("nat.shp"))
 #sf = ps.open(ps.examples.get_path("columbus.shp"))
 #sf = ps.open(ps.examples.get_path("sids2.shp"))
 bb = sf.bbox

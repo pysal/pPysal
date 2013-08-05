@@ -13,6 +13,7 @@ def binShapes(shapes, bBoxes, minBox, binWidth, bucketMin, ids = []):
         shapeI = shapes[i]
         bBoxI = bBoxes[i][:]
         projBox = [int((bBoxI[j] - minBox[j]) / binWidth[j]) for j in range(4)]
+        #print i, projBox, bucketMin
         for j in range(projBox[0], projBox[2] + 1  ):
             columns[j].add(idI)
             poly2Columns[idI].add(j)
@@ -126,7 +127,7 @@ if __name__ == '__main__':
     import time
 
     
-
+    """
     sf = ps.examples.get_path("columbus.shp")
     shpFileObject = ps.open(sf)
     shapeBox = shpFileObject.bbox
@@ -259,5 +260,113 @@ if __name__ == '__main__':
         print 'Parallel == Sequential'
     else:
         print 'Parallel != Sequential'
+    """
+    
+    sfName = "nat.shp"
+
+    t1 = time.time()
+    sf = ps.examples.get_path(sfName)
+    shpFileObject = ps.open(sf)
+    shapeBox = shpFileObject.bbox
+    nShapes = len(shpFileObject)
+    shapes = []
+    bBoxes = []
+    for shape in shpFileObject:
+        shapes.append(shape)
+        bBoxes.append(shape.bounding_box[:])
+
+    # figure out grid that will be used by all processes
+    DELTA = 0.000001
+    bucketMin = nShapes / 80 + 2
+    lengthX = ((shapeBox[2] + DELTA) - shapeBox[0]) / bucketMin
+    lengthY = ((shapeBox[3] + DELTA) - shapeBox[1]) / bucketMin
+    minBox = shapeBox[:2] * 2 # [minx, miny, minx, miny]
+    binWidth = [ lengthX, lengthY] * 2 # [lenX, lenY, lenX, lenY]
+
+    # sequential
+    stage1Seq = binShapes(shapes, bBoxes, minBox, binWidth, bucketMin)
+    stage2Seq = check_contiguity(shapes, bBoxes, stage1Seq['poly2Rows'],
+            stage1Seq['poly2Columns'], stage1Seq['rows'], stage1Seq['columns'])
+
+
+    wseq = ps.W(stage2Seq)
+    t2 = time.time()
+    print 'Sequential time: ', t2 - t1
+
+    t1 = time.time()
+    sf = ps.examples.get_path(sfName)
+    shpFileObject = ps.open(sf)
+    shapeBox = shpFileObject.bbox
+    nShapes = len(shpFileObject)
+    shapes = []
+    bBoxes = []
+    for shape in shpFileObject:
+        shapes.append(shape)
+        bBoxes.append(shape.bounding_box[:])
+
+    # figure out grid that will be used by all processes
+    DELTA = 0.000001
+    bucketMin = nShapes / 80 + 2
+    lengthX = ((shapeBox[2] + DELTA) - shapeBox[0]) / bucketMin
+    lengthY = ((shapeBox[3] + DELTA) - shapeBox[1]) / bucketMin
+    minBox = shapeBox[:2] * 2 # [minx, miny, minx, miny]
+    binWidth = [ lengthX, lengthY] * 2 # [lenX, lenY, lenX, lenY]
+
+
+    stage1Seq = binShapes(shapes, bBoxes, minBox, binWidth, bucketMin)
+
+    cores = mp.cpu_count() - 1
+    pool = mp.Pool(cores)
+    cuts = np.cumsum(np.arange(nShapes-1, 0, -1))
+    cuts = cuts / (cuts[-1] / (cores - 1))
+    start = [ np.nonzero(cuts==c)[0][0] for c in range((cores-1)) ]
+    end = start[1:]
+    end.append(nShapes)
+    slices = zip(start,end)
+
+    rows = stage1Seq['rows']
+    columns = stage1Seq['columns']
+    poly2Rows = stage1Seq['poly2Rows']
+    poly2Columns = stage1Seq['poly2Columns']
+    stage2 = {}
+    for c in range(cores - 1):
+        pids = range(slices[c][0], slices[c][1])
+        stage2[c] = pool.apply_async(check_contiguity, args=(shapes, bBoxes,
+            poly2Rows, poly2Columns, rows, columns, pids))
+    pool.close()
+    pool.join()
+    results2 = {}
+    for c in stage2:
+        results2[c] = stage2[c].get()
+
+    neighbors = dict([(i,set()) for i in range(nShapes) ])
+
+    for c in results2:
+        for key in results2[c]:
+            neighbors[key] = neighbors[key].union(results2[c][key])
+
+    wp2 = ps.W(neighbors)
+    t2 = time.time()
+    print 'Parallel (seq stage 1, par stage 2)', t2 - t1
+
+    if wp2.neighbors == wseq.neighbors:
+        print 'Same weights'
+    else:
+        print 'different weights'
+
+    t1 = time.time()
+    wpysal = ps.queen_from_shapefile(sf)
+    t2 = time.time()
+    print 'Sequential pysal: ', t2 - t1
+    nBad = 0
+    for key in wpysal.neighbors:
+        if set(wpysal.neighbors[key]) != wp2.neighbors[key]:
+                nBad += 1
+    if nBad == 0:
+        print 'Same weights as pysal: ', True
+    else:
+        print 'Same weights as pysal: ', False
+
+
 
 

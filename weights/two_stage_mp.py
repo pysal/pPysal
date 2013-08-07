@@ -7,6 +7,9 @@ def equalPysal(wps, wother):
     nDiff = 0
     for key in wps.neighbors:
         if set(wps.neighbors[key]) != wother.neighbors[key]:
+            #print key, 'pysal then other'
+            #print wps.neighbors[key]
+            #print wother.neighbors[key]
             nDiff += 1
     if not nDiff:
         return True
@@ -14,9 +17,7 @@ def equalPysal(wps, wother):
         return  False
         
 
-def binShapes(shapes, bBoxes, minBox, binWidth, bucketMin, ids = []):
-    if not ids:
-        ids = range(len(shapes))
+def binShapes(shapes, bBoxes, minBox, binWidth, bucketMin, ids):
     nShapes = len(ids)
     poly2Columns = dict([ (ids[i],set()) for i in range(nShapes) ])
     poly2Rows = dict([ (ids[i],set()) for i in range(nShapes) ])
@@ -25,8 +26,8 @@ def binShapes(shapes, bBoxes, minBox, binWidth, bucketMin, ids = []):
     
     for i in range(nShapes):
         idI = ids[i]
-        shapeI = shapes[i]
-        bBoxI = bBoxes[i][:]
+        shapeI = shapes[idI]
+        bBoxI = bBoxes[idI][:]
         projBox = [int((bBoxI[j] - minBox[j]) / binWidth[j]) for j in range(4)]
         #print i, projBox, bucketMin
         for j in range(projBox[0], projBox[2] + 1  ):
@@ -202,6 +203,7 @@ if __name__ == '__main__':
                 poly2Columns[polyId] = result['poly2Columns'][polyId]
                 poly2Rows[polyId] = result['poly2Rows'][polyId]
         
+
         # stage two
         pool = mp.Pool(cores)
         cuts = np.cumsum(np.arange(nShapes-1, 0, -1))
@@ -257,7 +259,8 @@ if __name__ == '__main__':
         binWidth = [ lengthX, lengthY] * 2 # [lenX, lenY, lenX, lenY]
 
 
-        stage1Seq = binShapes(shapes, bBoxes, minBox, binWidth, bucketMin)
+        ids = range(len(shapes))
+        stage1Seq = binShapes(shapes, bBoxes, minBox, binWidth, bucketMin, ids)
 
         cores = mp.cpu_count()
         pool = mp.Pool(cores)
@@ -272,6 +275,11 @@ if __name__ == '__main__':
         columns = stage1Seq['columns']
         poly2Rows = stage1Seq['poly2Rows']
         poly2Columns = stage1Seq['poly2Columns']
+        r1 = {}
+        r1['rows'] = rows
+        r1['columns'] = columns
+        r1['poly2Rows'] = poly2Rows
+        r1['poly2Columns'] = poly2Columns
 
         
         stage2 = {}
@@ -295,6 +303,10 @@ if __name__ == '__main__':
         return ps.W(neighbors, silent_island_warning=True)
 
 
+if __name__ == '__main__':
+
+
+    
     t1 = time.time()
     sf = ps.examples.get_path('columbus.shp')
     t2 = time.time()
@@ -331,158 +343,5 @@ if __name__ == '__main__':
 
 
     print equalPysal(wps, ws1p2)
-
-
-
-   
-    """
-    # sequential step 1, parallel step 2
-
-    stage1Seq = binShapes(shapes, bBoxes, minBox, binWidth, bucketMin)
-
-    pool = mp.Pool(cores)
-    cuts = np.cumsum(np.arange(nShapes-1, 0, -1))
-    cuts = cuts / (cuts[-1] / (cores - 1))
-    start = [ np.nonzero(cuts==c)[0][0] for c in range((cores-1)) ]
-    end = start[1:]
-    end.append(nShapes)
-    slices = zip(start,end)
-    print slices
-
-    rows = stage1Seq['rows']
-    columns = stage1Seq['columns']
-    poly2Rows = stage1Seq['poly2Rows']
-    poly2Columns = stage1Seq['poly2Columns']
-    stage2 = {}
-    for c in range(cores - 1):
-        pids = range(slices[c][0], slices[c][1])
-        print pids
-        stage2[c] = pool.apply_async(check_contiguity, args=(shapes, bBoxes,
-            poly2Rows, poly2Columns, rows, columns, pids))
-    pool.close()
-    pool.join()
-    results2 = {}
-    for c in stage2:
-        results2[c] = stage2[c].get()
-
-    neighbors = dict([(i,set()) for i in range(nShapes) ])
-
-    for c in results2:
-        for key in results2[c]:
-            neighbors[key] = neighbors[key].union(results2[c][key])
-
-    wp2 = ps.W(neighbors)
-
-    if wp2.neighbors == wseq.neighbors:
-        print 'Parallel == Sequential'
-    else:
-        print 'Parallel != Sequential'
-    
-    sfName = "nat.shp"
-
-    t1 = time.time()
-    sf = ps.examples.get_path(sfName)
-    shpFileObject = ps.open(sf)
-    shapeBox = shpFileObject.bbox
-    nShapes = len(shpFileObject)
-    shapes = []
-    bBoxes = []
-    for shape in shpFileObject:
-        shapes.append(shape)
-        bBoxes.append(shape.bounding_box[:])
-
-    # figure out grid that will be used by all processes
-    DELTA = 0.000001
-    bucketMin = nShapes / 80 + 2
-    lengthX = ((shapeBox[2] + DELTA) - shapeBox[0]) / bucketMin
-    lengthY = ((shapeBox[3] + DELTA) - shapeBox[1]) / bucketMin
-    minBox = shapeBox[:2] * 2 # [minx, miny, minx, miny]
-    binWidth = [ lengthX, lengthY] * 2 # [lenX, lenY, lenX, lenY]
-
-    # sequential
-    stage1Seq = binShapes(shapes, bBoxes, minBox, binWidth, bucketMin)
-    stage2Seq = check_contiguity(shapes, bBoxes, stage1Seq['poly2Rows'],
-            stage1Seq['poly2Columns'], stage1Seq['rows'], stage1Seq['columns'])
-
-
-    wseq = ps.W(stage2Seq)
-    t2 = time.time()
-    print 'Sequential time: ', t2 - t1
-
-    t1 = time.time()
-    sf = ps.examples.get_path(sfName)
-    shpFileObject = ps.open(sf)
-    shapeBox = shpFileObject.bbox
-    nShapes = len(shpFileObject)
-    shapes = []
-    bBoxes = []
-    for shape in shpFileObject:
-        shapes.append(shape)
-        bBoxes.append(shape.bounding_box[:])
-
-    # figure out grid that will be used by all processes
-    DELTA = 0.000001
-    bucketMin = nShapes / 80 + 2
-    lengthX = ((shapeBox[2] + DELTA) - shapeBox[0]) / bucketMin
-    lengthY = ((shapeBox[3] + DELTA) - shapeBox[1]) / bucketMin
-    minBox = shapeBox[:2] * 2 # [minx, miny, minx, miny]
-    binWidth = [ lengthX, lengthY] * 2 # [lenX, lenY, lenX, lenY]
-
-
-    stage1Seq = binShapes(shapes, bBoxes, minBox, binWidth, bucketMin)
-
-    cores = mp.cpu_count() - 1
-    pool = mp.Pool(cores)
-    cuts = np.cumsum(np.arange(nShapes-1, 0, -1))
-    cuts = cuts / (cuts[-1] / (cores - 1))
-    start = [ np.nonzero(cuts==c)[0][0] for c in range((cores-1)) ]
-    end = start[1:]
-    end.append(nShapes)
-    slices = zip(start,end)
-
-    rows = stage1Seq['rows']
-    columns = stage1Seq['columns']
-    poly2Rows = stage1Seq['poly2Rows']
-    poly2Columns = stage1Seq['poly2Columns']
-    stage2 = {}
-    for c in range(cores - 1):
-        pids = range(slices[c][0], slices[c][1])
-        stage2[c] = pool.apply_async(check_contiguity, args=(shapes, bBoxes,
-            poly2Rows, poly2Columns, rows, columns, pids))
-    pool.close()
-    pool.join()
-    results2 = {}
-    for c in stage2:
-        results2[c] = stage2[c].get()
-
-    neighbors = dict([(i,set()) for i in range(nShapes) ])
-
-    for c in results2:
-        for key in results2[c]:
-            neighbors[key] = neighbors[key].union(results2[c][key])
-
-    wp2 = ps.W(neighbors)
-    t2 = time.time()
-    print 'Parallel (seq stage 1, par stage 2)', t2 - t1
-
-    if wp2.neighbors == wseq.neighbors:
-        print 'Same weights'
-    else:
-        print 'different weights'
-
-    t1 = time.time()
-    wpysal = ps.queen_from_shapefile(sf)
-    t2 = time.time()
-    print 'Sequential pysal: ', t2 - t1
-    nBad = 0
-    for key in wpysal.neighbors:
-        if set(wpysal.neighbors[key]) != wp2.neighbors[key]:
-                nBad += 1
-    if nBad == 0:
-        print 'Same weights as pysal: ', True
-    else:
-        print 'Same weights as pysal: ', False
-
-    """
 
 

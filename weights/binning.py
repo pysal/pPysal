@@ -1,5 +1,6 @@
 #Binning
 import pysal
+import numpy as np
 
 # delta to get buckets right
 DELTA = 0.000001
@@ -28,7 +29,8 @@ def bbcommon(bb, bbother):
     return chflag
 
 
-def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
+def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001,
+        shapeDensity=4):
 
 
     shpFileObject = pysal.open(shpFile)
@@ -41,11 +43,14 @@ def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
     numPoly = len(shpFileObject)
     shapes = [[]] * numPoly
 
+    bucketmin = np.int(np.ceil(np.sqrt((numPoly * 1. /  shapeDensity))))
+    #print bucketmin
+
     # bucket size
-    if (numPoly < SHP_SMALL):
-        bucketmin = numPoly / BUCK_SM + 2
-    else:
-        bucketmin = numPoly / BUCK_LG + 2
+    #if (numPoly < SHP_SMALL):
+    #    bucketmin = numPoly / BUCK_SM + 2
+    #else:
+    #    bucketmin = numPoly / BUCK_LG + 2
     # bucket length
     lengthx = ((shapebox[2] + DELTA) - shapebox[0]) / bucketmin
     lengthy = ((shapebox[3] + DELTA) - shapebox[1]) / bucketmin
@@ -101,4 +106,29 @@ def bin_shapefile(shpFile, wtype='rook', n_cols=10, n_rows=10, buff=1.0001):
     results['n_polygons'] = numPoly
     results['potential_neighbors'] = w
     results['shapes'] = shapes
+    shpFileObject.close()
     return results
+
+
+if __name__ == '__main__':
+
+    import pysal as ps
+
+    import time 
+    results = {}
+ 
+    sf =  "1000x10.shp"
+    #sf =  ps.examples.get_path("nat.shp")
+    w = bin_shapefile(sf,shapeDensity=4) # default 
+      
+    for density in range(1,101):
+        t1 = time.time()
+        w4 = bin_shapefile(sf,shapeDensity = density)
+        if w4['potential_neighbors'] != w['potential_neighbors']:
+            print 'no', density
+        t2 = time.time()
+        #print 'density %d: %f'%(density,t2 - t1)
+        results[density] = t2-t1
+
+
+

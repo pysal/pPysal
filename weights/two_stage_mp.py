@@ -327,7 +327,7 @@ if __name__ == '__main__':
             for key in results[c]:
                 neighbors[key] = neighbors[key].union(results[c][key])
 
-        return ps.W(neighbors)#, silent_island_warning=True)
+        return ps.W(neighbors, silent_island_warning=True)
 
 
     def p2_global(sfname):
@@ -422,7 +422,7 @@ if __name__ == '__main__':
             for key in results[c]:
                 neighbors[key] = neighbors[key].union(results[c][key])
 
-        return ps.W(neighbors)#,silent_island_warning=True)
+        return ps.W(neighbors,silent_island_warning=True)
 
 if __name__ == '__main__':
 

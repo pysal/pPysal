@@ -137,38 +137,38 @@ if __name__ == '__main__':
 
     import time
 
-    t1 = time.time()
-    res, c = bf_queen(shps)
-    t2 = time.time()
-    
-    print 'Sequential: ',t2-t1
-    
-    # parallel
-    t1 = time.time()
-    view = client[0:-1]
-    with client[:].sync_imports():
-        from itertools import combinations
-    results = view.map(bf_queen, bins.values(), ids.values())
-    t2 = time.time()
-    
-    # combine results
-    neighbors = {}
-    for i,result in enumerate(results.result):
-        neigh,c = result
-        for key in neigh:
-            if key not in neighbors:
-                neighbors[key] = neigh[key]
-            else:
-                neighbors[key] = neighbors[key].union(neigh[key])
-    
-    t3 = time.time()
-    print 'Parallel: ', t3-t1
+    #t1 = time.time()
+    #res, c = bf_queen(shps)
+    #t2 = time.time()
+    #
+    #print 'Sequential: ',t2-t1
+    #
+    ## parallel
+    #t1 = time.time()
+    #view = client[0:-1]
+    #with client[:].sync_imports():
+    #    from itertools import combinations
+    #results = view.map(bf_queen, bins.values(), ids.values())
+    #t2 = time.time()
+    #
+    ## combine results
+    #neighbors = {}
+    #for i,result in enumerate(results.result):
+    #    neigh,c = result
+    #    for key in neigh:
+    #        if key not in neighbors:
+    #            neighbors[key] = neigh[key]
+    #        else:
+    #            neighbors[key] = neighbors[key].union(neigh[key])
+    #
+    #t3 = time.time()
+    #print 'Parallel: ', t3-t1
 
     # vectorized parallel
     GRID_DIM = 80
     t1 = time.time()
     dims = grid(bb, GRID_DIM)
-    bboxes = np.array([shp.bbox for shp in shps])
+    bboxes = np.array([shp.bounding_box[:] for shp in shps])
     origin = np.array([bb[0],bb[1], bb[0], bb[1]])
     grid_cells = ((bboxes-origin) / dims).astype(int) # [r0,c0, r1,c1]
     grid_cells[:,[2,3]] += 1
@@ -184,6 +184,7 @@ if __name__ == '__main__':
     for i, row in enumerate(grid_cells):
         cols_2_polys[r_slices[i,0]:r_slices[i,1],i] = 1
         rows_2_polys[c_slices[i,0]:c_slices[i,1],i] = 1
+    shps = np.array(shps)
     import numpy
     
     def bb_check(i):
@@ -193,6 +194,7 @@ if __name__ == '__main__':
         # need to add: for neighbor in neighbors do explict check for shared vertex in shapes
         # potential neighbors have bounding boxes that share a commmon grid
         # row and a common grid column, but bounding boxes may not overlap
+        #y = shps[i]
         return potential_neighbors[potential_neighbors != i]
 
     view = client[0:-1]
@@ -201,6 +203,7 @@ if __name__ == '__main__':
     # rows in the grid == number of columns
     view['rows_2_polys'] = rows_2_polys
     view['cols_2_polys'] = cols_2_polys
+    view['shps'] = shps
 
     with client[:].sync_imports():
         import numpy 
@@ -212,7 +215,7 @@ if __name__ == '__main__':
 
     t1 = time.time()
     dims = grid(bb, GRID_DIM)
-    bboxes = np.array([shp.bbox for shp in shps])
+    bboxes = np.array([shp.bounding_box[:] for shp in shps])
     origin = np.array([bb[0],bb[1], bb[0], bb[1]])
     grid_cells = ((bboxes-origin) / dims).astype(int) # [r0,c0, r1,c1]
     grid_cells[:,[2,3]] += 1

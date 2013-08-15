@@ -184,7 +184,8 @@ if __name__ == '__main__':
     for i, row in enumerate(grid_cells):
         cols_2_polys[r_slices[i,0]:r_slices[i,1],i] = 1
         rows_2_polys[c_slices[i,0]:c_slices[i,1],i] = 1
-    shps = np.array(shps)
+    #vertices = np.array([np.array(shp.vertices) for shp in shps])
+    vertices = [shp.vertices for shp in shps]
     import numpy
     
     def bb_check(i):
@@ -194,8 +195,20 @@ if __name__ == '__main__':
         # need to add: for neighbor in neighbors do explict check for shared vertex in shapes
         # potential neighbors have bounding boxes that share a commmon grid
         # row and a common grid column, but bounding boxes may not overlap
-        #y = shps[i]
-        return potential_neighbors[potential_neighbors != i]
+        bbox_i = bboxes[i]
+        vertices_i = vertices[i]
+        potential_neighbors  = potential_neighbors[potential_neighbors != i]
+        neighbors = []
+        for j in potential_neighbors:
+            vertices_j = vertices[j]
+            bbox_j = bboxes[j]
+            if not ((bbox_j[2] < bbox_i[0]) or (bbox_j[0] > bbox_i[2])):
+                if not ((bbox_j[3] < bbox_i[1]) or (bbox_j[1] > bbox_i[3])):
+                    # bounding boxes overlap
+                    com_v = [ vj for vj in vertices_j if vj in vertices_i ]
+                    if len(com_v) > 0:
+                        neighbors.append(j)
+        return  neighbors
 
     view = client[0:-1]
     # put rows_2_poly and cols_2_polys in the namespaces of all the views
@@ -203,11 +216,13 @@ if __name__ == '__main__':
     # rows in the grid == number of columns
     view['rows_2_polys'] = rows_2_polys
     view['cols_2_polys'] = cols_2_polys
-    view['shps'] = shps
+    view['bboxes'] = bboxes
+    view['vertices'] = vertices
+    #view['shps'] = shps
 
     with client[:].sync_imports():
         import numpy 
-    potential_neighbors = view.map_sync(bb_check, range(n))
+    neighbors = view.map_sync(bb_check, range(n))
     t2 = time.time()
     print 'Parallel vectorized: ', t2-t1
 

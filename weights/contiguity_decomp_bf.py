@@ -125,32 +125,110 @@ def bf_queen(shps, ids = []):
                     w[r] = w[r].union(set([l]))
     return w, coords
 
-import time
-t1 = time.time()
-res, c = bf_queen(shps)
-t2 = time.time()
+def grid(bbox, n, delta=0.000001, dimension=10):
+    bucket_min = dimension 
+    width = (( bbox[2] + delta) - bbox[0] ) / bucket_min
+    height = (( bbox[3] + delta) - bbox[1] ) / bucket_min
+    return  [width, height] * 2
+    
 
-print 'Sequential: ',t2-t1
 
-# parallel
-t1 = time.time()
-view = client[0:-1]
-with client[:].sync_imports():
-    from itertools import combinations
-results = view.map(bf_queen, bins.values(), ids.values())
-t2 = time.time()
+if __name__ == '__main__':
 
-# combine results
-neighbors = {}
-for i,result in enumerate(results.result):
-    neigh,c = result
-    for key in neigh:
-        if key not in neighbors:
-            neighbors[key] = neigh[key]
-        else:
-            neighbors[key] = neighbors[key].union(neigh[key])
+    import time
 
-t3 = time.time()
-print 'Parallel: ', t3-t1
+    t1 = time.time()
+    res, c = bf_queen(shps)
+    t2 = time.time()
+    
+    print 'Sequential: ',t2-t1
+    
+    # parallel
+    t1 = time.time()
+    view = client[0:-1]
+    with client[:].sync_imports():
+        from itertools import combinations
+    results = view.map(bf_queen, bins.values(), ids.values())
+    t2 = time.time()
+    
+    # combine results
+    neighbors = {}
+    for i,result in enumerate(results.result):
+        neigh,c = result
+        for key in neigh:
+            if key not in neighbors:
+                neighbors[key] = neigh[key]
+            else:
+                neighbors[key] = neighbors[key].union(neigh[key])
+    
+    t3 = time.time()
+    print 'Parallel: ', t3-t1
+
+    # vectorized parallel
+    GRID_DIM = 80
+    t1 = time.time()
+    dims = grid(bb, GRID_DIM)
+    bboxes = np.array([shp.bbox for shp in shps])
+    origin = np.array([bb[0],bb[1], bb[0], bb[1]])
+    grid_cells = ((bboxes-origin) / dims).astype(int) # [r0,c0, r1,c1]
+    grid_cells[:,[2,3]] += 1
+    max_g = grid_cells.max(axis=1)
+    n = len(shps)
+    #global rows_2_polys
+    #global cols_2_polys
+
+    rows_2_polys = np.zeros((max_g[2],n), 'int')
+    cols_2_polys = np.zeros((max_g[3],n), 'int')
+    r_slices = grid_cells[:,[0,2]]
+    c_slices = grid_cells[:,[1,3]]
+    for i, row in enumerate(grid_cells):
+        cols_2_polys[r_slices[i,0]:r_slices[i,1],i] = 1
+        rows_2_polys[c_slices[i,0]:c_slices[i,1],i] = 1
+    import numpy
+    
+    def bb_check(i):
+        r = numpy.dot(numpy.diag(rows_2_polys[:,i]), rows_2_polys).sum(axis=0)
+        c = numpy.dot(numpy.diag(cols_2_polys[:,i]), cols_2_polys).sum(axis=0)
+        potential_neighbors = numpy.nonzero((r>0) * (c>0))[0]
+        # need to add: for neighbor in neighbors do explict check for shared vertex in shapes
+        # potential neighbors have bounding boxes that share a commmon grid
+        # row and a common grid column, but bounding boxes may not overlap
+        return potential_neighbors[potential_neighbors != i]
+
+    view = client[0:-1]
+    # put rows_2_poly and cols_2_polys in the namespaces of all the views
+    # these are "small as in GRID_DIM x n  where GRID_DIM is the number of
+    # rows in the grid == number of columns
+    view['rows_2_polys'] = rows_2_polys
+    view['cols_2_polys'] = cols_2_polys
+
+    with client[:].sync_imports():
+        import numpy 
+    potential_neighbors = view.map_sync(bb_check, range(n))
+    t2 = time.time()
+    print 'Parallel vectorized: ', t2-t1
+
+    #vectorized sequential
+
+    t1 = time.time()
+    dims = grid(bb, GRID_DIM)
+    bboxes = np.array([shp.bbox for shp in shps])
+    origin = np.array([bb[0],bb[1], bb[0], bb[1]])
+    grid_cells = ((bboxes-origin) / dims).astype(int) # [r0,c0, r1,c1]
+    grid_cells[:,[2,3]] += 1
+    max_g = grid_cells.max(axis=1)
+    n = len(shps)
+    rows_2_polys = np.zeros((max_g[2],n), 'int')
+    cols_2_polys = np.zeros((max_g[3],n), 'int')
+    r_slices = grid_cells[:,[0,2]]
+    c_slices = grid_cells[:,[1,3]]
+    for i, row in enumerate(grid_cells):
+        cols_2_polys[r_slices[i,0]:r_slices[i,1],i] = 1
+        rows_2_polys[c_slices[i,0]:c_slices[i,1],i] = 1
+
+
+    neighbors = map(bb_check, range(n))
+    t2 = time.time()
+    print 'Serial vectorized: ', t2-t1
 
 

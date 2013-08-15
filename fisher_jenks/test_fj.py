@@ -5,7 +5,7 @@ from fj_refactored import fisher_jenks
 
 cores = [1,2,4,16,32]
 classes = [5,6,7]
-data_sizes = [1000,2000,4000,8000,16000,24000,32000,40000,48000,56000,64000,72000,80000]
+data_sizes = [500, 1000, 2500, 5000, 7500, 10000, 12500, 15000, 17500, 20000, 22500, 25000]
 
 for c in cores:
     for d in data_sizes:

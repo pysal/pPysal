@@ -90,19 +90,35 @@ def grid(bbox, n, delta=0.000001, dimension=10):
     return  [width, height] * 2
 
 def bb_check(i):
-    r = numpy.dot(numpy.diag(rows_2_polys[:,i]), rows_2_polys).sum(axis=0)
-    c = numpy.dot(numpy.diag(cols_2_polys[:,i]), cols_2_polys).sum(axis=0)
-    potential_neighbors = numpy.nonzero((r>0) * (c>0))[0]
+    r = np.dot(np.diag(shared_rows[:,i]), shared_rows).sum(axis=0)
+    c = np.dot(np.diag(shared_cols[:,i]), shared_cols).sum(axis=0)
+    potential_neighbors = np.nonzero((r>0) * (c>0))[0]
     # need to add: for neighbor in neighbors do explict check for shared vertex in shapes
     # potential neighbors have bounding boxes that share a commmon grid
     # row and a common grid column, but bounding boxes may not overlap
-    bbox_i = bboxes[i]
-    vertices_i = vertices[i]
+    bbox_i = shared_bbox[i]
+
+    #For now, repack the vertices as a list on the child side.  Slicing later.
+    valid_vertices_i = shared_vertices[i][np.where(np.isnan(shared_vertices[i]) == False)]
+    #knock out has helper function if this works
+    vertices_i = [()] * (len(valid_vertices_i) / 2)
+    c = 0
+    for i in range(len(vertices_i)):
+        vertices_i[i] = (valid_vertices_i[i+c], valid_vertices_i[i+c+1])
+        c += 1
+
     potential_neighbors  = potential_neighbors[potential_neighbors != i]
     neighbors = []
     for j in potential_neighbors:
-        vertices_j = vertices[j]
-        bbox_j = bboxes[j]
+        #Unpack the array into a list of tuple coords
+        valid_vertices_j = shared_vertices[j][np.where(np.isnan(shared_vertices[j]) == False)]
+        vertices_j = [()] * (len(valid_vertices_j) / 2)
+        c = 0
+        for k in range(len(vertices_j)):
+            vertices_j[k] = (valid_vertices_j[k+c], valid_vertices_j[k+c+1])
+            c += 1
+
+        bbox_j = shared_bbox[j]
         if not ((bbox_j[2] < bbox_i[0]) or (bbox_j[0] > bbox_i[2])):
             if not ((bbox_j[3] < bbox_i[1]) or (bbox_j[1] > bbox_i[3])):
                 # bounding boxes overlap
@@ -110,6 +126,22 @@ def bb_check(i):
                 if len(com_v) > 0:
                     neighbors.append(j)
     return  neighbors
+
+
+def initArr(bbox_, rows_2_polys_, cols_2_polys_, vertices_):
+    """
+    Put the ctype arrays into global variables so that all
+     children can access the memory space.
+     """
+    global shared_rows
+    global shared_bbox
+    global shared_cols
+    global shared_vertices
+
+    shared_rows = rows_2_polys_
+    shared_cols = cols_2_polys_
+    shared_bbox = bbox_
+    shared_vertices = vertices_
 
 if __name__ == '__main__':
 
@@ -232,21 +264,27 @@ if __name__ == '__main__':
             vertices[i][j+c] = v[0]
             vertices[i][j+c+1] = v[1]
             c += 1
+    #Initialize as a global, shared array
+    initArr(bboxes, rows_2_polys, cols_2_polys, vertices)
 
-    exit()
-    view = client[0:-1]
+    #Single core example of the slicing to get valid vertices
+    #valid_verts =shared_vertices[0][np.where(np.isnan(shared_vertices[0]) == False)]
+    #Preallocation should be faster here, since we don't need to append.
+    #v = [()] * (len(valid_verts) / 2)
+    #c = 0
+    #for i in range(len(v)):
+        #v[i] = (valid_verts[i+c], valid_verts[i+c+1])
+        #c += 1
+    #print v
+    #exit()
     # put rows_2_poly and cols_2_polys in the namespaces of all the views
     # these are "small as in GRID_DIM x n  where GRID_DIM is the number of
     # rows in the grid == number of columns
-    view['rows_2_polys'] = rows_2_polys
-    view['cols_2_polys'] = cols_2_polys
-    view['bboxes'] = bboxes
-    view['vertices'] = vertices
-    #view['shps'] = shps
-
-    with client[:].sync_imports():
-        import numpy
-    neighbors = view.map_sync(bb_check, range(n))
+    pool = mp.Pool(ncpus)
+    neighbors = pool.map(bb_check, range(n))
+    pool.close()
+    pool.join()
+    #print neighbors
     t2 = time.time()
     print 'Parallel vectorized: ', t2-t1
 

@@ -46,7 +46,7 @@ w = np.abs(w)
 bounds = np.arange(bb[0], bb[2]+w, w)[1:]
 bounds[-1] += 0.0001*w
 bins = {}
-ids = {} 
+ids = {}
 for b in range(len(bounds)):
     bins[b] = []
     ids[b] = []
@@ -126,11 +126,11 @@ def bf_queen(shps, ids = []):
     return w, coords
 
 def grid(bbox, n, delta=0.000001, dimension=10):
-    bucket_min = dimension 
+    bucket_min = dimension
     width = (( bbox[2] + delta) - bbox[0] ) / bucket_min
     height = (( bbox[3] + delta) - bbox[1] ) / bucket_min
     return  [width, height] * 2
-    
+
 
 
 if __name__ == '__main__':
@@ -184,10 +184,14 @@ if __name__ == '__main__':
     for i, row in enumerate(grid_cells):
         cols_2_polys[r_slices[i,0]:r_slices[i,1],i] = 1
         rows_2_polys[c_slices[i,0]:c_slices[i,1],i] = 1
+    vertices = np.empty(len(bboxes), dtype=object)
+    for i,shp in enumerate(shps):
+        vertices[i] = np.array(shp.vertices)
+    print type(vertices)
     #vertices = np.array([np.array(shp.vertices) for shp in shps])
-    vertices = [shp.vertices for shp in shps]
+    #vertices = [shp.vertices for shp in shps]
     import numpy
-    
+
     def bb_check(i):
         r = numpy.dot(numpy.diag(rows_2_polys[:,i]), rows_2_polys).sum(axis=0)
         c = numpy.dot(numpy.diag(cols_2_polys[:,i]), cols_2_polys).sum(axis=0)
@@ -221,7 +225,7 @@ if __name__ == '__main__':
     #view['shps'] = shps
 
     with client[:].sync_imports():
-        import numpy 
+        import numpy
     neighbors = view.map_sync(bb_check, range(n))
     t2 = time.time()
     print 'Parallel vectorized: ', t2-t1

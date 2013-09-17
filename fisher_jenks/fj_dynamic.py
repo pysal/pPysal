@@ -12,7 +12,7 @@ import multiprocessing as mp
 import ctypes
 import numpy as np
 
-
+np.set_printoptions(linewidth = 200)
 def allocate(values, classes):
     numvalues = len(values)
 
@@ -26,22 +26,39 @@ def allocate(values, classes):
                 ((np.cumsum(arrRow)*np.cumsum(arrRow)) / (n)))
 
     pivotmatrix = np.ndarray((1, classes), dtype=np.float)
+    val = np.asarray(values)
 
-    initarr(errormatrix)
+
+    initarr(errormatrix, val)
     return pivotmatrix
 
 def err(row, y, step, lenrow):
     stop = y + step
     if stop + 1 > lenrow:
         stop = lenrow - 1
+
     while y <= stop:
         err = sharederror[row-1][row-1:y+row]
-        print err
+        diam = np.zeros(err.shape)
+        #diam is a column from the diameter matrix.
+        for x in range(len(diam)):
+            obs = sharedval.copy()
+            #Diagonally symmetric, prepend zeros
+            obs[:row + x] = 0
+            n = len(obs) - row + x
+            #n = len(np.where(obs != 0)[0])
+            arrRow = obs[row+x:row+y+1]
+            #print row,arrRow
+            diam[x] = ((np.sum(np.square(arrRow))) - \
+                ((np.sum(arrRow)*np.sum(arrRow)) / (len(arrRow))))
+        sharedrow[y] = np.amin(diam + err)
         y += 1
 
-def initarr(errormatrix_):
+def initarr(errormatrix_, val_):
     global sharederror
     sharederror = errormatrix_
+    global sharedval
+    sharedval = val_
 
 def init_error_row(errorrow_):
     global sharedrow
@@ -52,17 +69,18 @@ def main(values, classes, sort=True):
         values.sort()
 
     pivotmatrix = allocate(values, classes)
-    print sharederror
     cores = mp.cpu_count()
 
     #Naive partitioning
     row = 1
     jobs = []
-    for x in sharederror[1:]:
+    #Step through rows of the error matrix
+    for x in sharederror[row:]:
         errorrow = x[row:]
         init_error_row(errorrow)
         step = len(errorrow) // cores
-        for y in range(0,len(errorrow), step+1):
+
+        for y in range(0,len(errorrow), step + 1):
             p = mp.Process(target=err,args=(row, y, step, len(errorrow)))
             jobs.append(p)
 
@@ -72,6 +90,7 @@ def main(values, classes, sort=True):
             j.join()
         del jobs[:], p, j
         row += 1
+    print sharederror
 if __name__ == "__main__":
     values = [12,10.8, 11, 10.8, 10.8, 10.8, 10.6, 10.8, 10.3, 10.3, 10.3,10.4, 10.5, 10.2, 10.0, 9.9]
     main(values, 5)

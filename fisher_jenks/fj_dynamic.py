@@ -6,13 +6,18 @@ dynamic population of the error matrix.
 The idea is that the error matrix is only (nxk), so
 scalability in the memory domain will be better than
 storing the entire (nxn) distance matrix.
+
+Next steps:
+    1. Intelligent balancing.
+    2. Per core caching of preceeding values to avoid
+        redundant computation.
 '''
 
 import multiprocessing as mp
 import ctypes
 import numpy as np
 
-np.set_printoptions(linewidth = 200)
+#np.set_printoptions(linewidth = 200)
 def allocate(values, classes):
     numvalues = len(values)
 
@@ -46,9 +51,8 @@ def err(row, y, step, lenrow):
             #Diagonally symmetric, prepend zeros
             obs[:row + x] = 0
             n = len(obs) - row + x
-            #n = len(np.where(obs != 0)[0])
+            #Window of values to compute
             arrRow = obs[row+x:row+y+1]
-            #print row,arrRow
             diam[x] = ((np.sum(np.square(arrRow))) - \
                 ((np.sum(arrRow)*np.sum(arrRow)) / (len(arrRow))))
         sharedrow[y] = np.amin(diam + err)

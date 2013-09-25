@@ -10,6 +10,10 @@ The following components are being explored
 
 
 Anaconda python can be installed in user directories.
+```
+chmod +x Anaconda-1.7.0-Linux-x86_64.sh
+./Anaconda-1.7.0-Linux-x86_64.sh
+```
 
 After Anaconda is installed pypar can be installed as follows:
 

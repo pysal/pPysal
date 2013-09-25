@@ -24,6 +24,9 @@ use openmpi-1.6.4
 python setup.py install
 ```
 
+## Test Script Descriptions
+
+ - `mpi_test1.py` is an embarassingly parallel implementation that uses 3 processors and is run via mpirun.  Two of the processors are workers and a third receives results.
 
 
 

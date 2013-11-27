@@ -247,3 +247,4 @@ if __name__ == "__main__":
 
         tb = time.time()
         print "Total processing time was {} seconds".format(tb-ta)
+

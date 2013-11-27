@@ -63,10 +63,10 @@ if __name__ == "__main__":
     else:
         cores = mp.cpu_count()
 
-    ##print "This version uses apply_async with a callback function and {0} cores.".format(cores)
+    #print "This version uses apply_async with a callback function and {0} cores.".format(cores)
 
     #fnames = ['1024_lattice.shp', '10000_lattice.shp', '50176_lattice.shp', '100489_lattice.shp', '1000_poly.shp', '10000_poly.shp', '50000_poly.shp', '100000_poly.shp']
-    fnames = ['2500_poly.shp']
+    fnames = ['TestData/2500_poly.shp', 'TestData/10000_poly.shp','TestData/22500_poly.shp','TestData/40000_poly.shp','TestData/50000_poly.shp', 'TestData/62500_poly.shp', 'TestData/90000_poly.shp', '100000_poly.shp' ]
     for fname in fnames:
         ta = time.time()  #Global time keeper
 
@@ -74,19 +74,19 @@ if __name__ == "__main__":
         #Phase 1: Bin the shapefile
         shpFileObject = ps.open(fname)
         t2 = time.time()
-        #print "Reading the shapefile took {} seconds".format(t2-t1)
+        print "Reading the shapefile took {} seconds".format(t2-t1)
 
         t1 = time.time()
         if shpFileObject.type != ps.cg.Polygon:
             break
         t2 = time.time()
-        #print "Checking the geometry took {} seconds".format(t2-t1)
+        print "Checking the geometry took {} seconds".format(t2-t1)
 
         t1 = time.time()
         shapebox = shpFileObject.bbox      # bounding box
         numPoly = len(shpFileObject)
         t2 = time.time()
-        #print "Getting the BBox and length took {} seconds".format(t2-t1)
+        print "Getting the BBox and length took {} seconds".format(t2-t1)
 
         t1 = time.time()
         t3 = time.time()
@@ -115,11 +115,11 @@ if __name__ == "__main__":
         geoms[1] = geomy
         del geomx, geomy
         t2 = time.time()
-        #print "***THIS IS ALL READ TIME***"
-        #print "Flattening vertices and cellsize computation required {} seconds".format(t2 - t1)
-        #print "     Within this {} seconds were used for allocation".format(t4-t3)
-        #print "***DONE READING***"
-        #print "Processing with a cell size of {} units".format(cellsize)
+        print "***THIS IS ALL READ TIME***"
+        print "Flattening vertices and cellsize computation required {} seconds".format(t2 - t1)
+        print "     Within this {} seconds were used for allocation".format(t4-t3)
+        print "***DONE READING***"
+        print "Processing with a cell size of {} units".format(cellsize)
 
         t1 = time.time()
         xdimension = abs(int((shapebox[2] - shapebox[0]) / cellsize))
@@ -149,7 +149,7 @@ if __name__ == "__main__":
         ind = np.lexsort((memship[:,0], memship[:,2], memship[:,1], memship[:,3]))
         sortmem = memship[ind]
         t2 = time.time()
-        #print "Getting buckets and generating data structure took {} seconds.".format(t2-t1)
+        print "Getting buckets and generating data structure took {} seconds.".format(t2-t1)
 
         t1 = time.time()
         potential_neighbors = {}
@@ -179,7 +179,7 @@ if __name__ == "__main__":
             sortmem[crosseridy,2] = yrollback
 
         t2 = time.time()
-        #print "Extracting vectors to polygon membership lists too {} seconds".format(t2-t1)
+        print "Extracting vectors to polygon membership lists too {} seconds".format(t2-t1)
 
         t1 = time.time()
         #Can I get a vertex count from a shapefile header?
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         global_pointers(cgeoms, coffsets, contmatrix)
 
         t2 = time.time()
-        #print "Creating ctype shared memory vertices took {} seconds".format(t2-t1)
+        print "Creating ctype shared memory vertices took {} seconds".format(t2-t1)
 
 
         '''
@@ -206,7 +206,7 @@ if __name__ == "__main__":
         cores = mp.cpu_count()
         pool = mp.Pool(cores)
         t2 = time.time()
-        #print "Initializing the pool of workers took {} seconds".format(t2 - t1)
+        print "Initializing the pool of workers took {} seconds".format(t2 - t1)
         '''
 
         t1 = time.time()
@@ -219,7 +219,7 @@ if __name__ == "__main__":
             stops.append(len(neighbor_checks))
         offsets = [ range(z[0],z[1]) for z in zip(starts, stops)]
         t2 = time.time()
-        #print "Computing decomposition took {} seconds".format(t2-t1)
+        print "Computing decomposition took {} seconds".format(t2-t1)
 
         t1 = time.time()
         jobs = []
@@ -234,7 +234,7 @@ if __name__ == "__main__":
         for job in jobs:
             job.join()
         t2 = time.time()
-        #print "Multicore contiguity check took {} seconds".format(t2-t1)
+        print "Multicore contiguity check took {} seconds".format(t2-t1)
 
         t1 = time.time()
         w = {}
@@ -243,7 +243,7 @@ if __name__ == "__main__":
             neigh = nonzero[nonzero[:,0] == i]
             w[i] = neigh[:,1].tolist()
         t2 = time.time()
-        #print "Generating a W from a sparse matrix took {} seconds".format(t2-t1)
+        print "Generating a W from a sparse matrix took {} seconds".format(t2-t1)
 
         tb = time.time()
         print "Total processing time was {} seconds".format(tb-ta)

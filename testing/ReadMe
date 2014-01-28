@@ -1,6 +1,6 @@
 ###ReadMe###
 
-The `tet1` files run a super simple test on each of the nodes of the GeoDa Cluster.  The process is:
+The `test1` files run a super simple test on each of the nodes of the GeoDa Cluster.  The process is:
 
 1. Use `pbsnodes -a` to get a list of the nodes.
 2. Parse the list and get only those nodes that report up.

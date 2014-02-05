@@ -56,6 +56,7 @@ def calc(w, z ,n_1, den):
     zl = slag(w,z)
     return n_1 * z * zl / den
 
+#Send the permutations over the line to the child, not a split of the ids over all the cores.
 def crand(z, weights, permutations, n,start,step):
     #pid = mp.current_process()._identity[0]
     lisas = np.frombuffer(c_lisas)

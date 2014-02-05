@@ -244,6 +244,7 @@ if __name__ == '__main__':
     cols_2_polys.shape = (max_g[3],n)
     r_slices = grid_cells[:,[0,2]]
     c_slices = grid_cells[:,[1,3]]
+    print grid_cells
     for i, row in enumerate(grid_cells):
         cols_2_polys[r_slices[i,0]:r_slices[i,1],i] = 1
         rows_2_polys[c_slices[i,0]:c_slices[i,1],i] = 1

@@ -12,12 +12,12 @@ from numpy.random import randint
 
 
 def check_contiguity(checks,lock,weight_type='ROOK'):
-    cid = mp.current_process()._name
     geoms = np.frombuffer(sgeoms)
     geoms.shape = (2,geoms.shape[0] / 2)
     offsets = np.frombuffer(soffsets)  #This is float, but should be int...
     contmatrix = np.frombuffer(scontmatrix)
     contmatrix.shape = (len(offsets), len(offsets))
+
     if weight_type == 'ROOK':
         for polys in checks:
             potential_neigh = polys.tolist()
@@ -79,7 +79,8 @@ if __name__ == "__main__":
 
     t1 = time.time()
     if shpFileObject.type != ps.cg.Polygon:
-        break
+        exit()
+
     t2 = time.time()
     print "Checking the geometry took {} seconds".format(t2-t1)
 
@@ -236,7 +237,7 @@ if __name__ == "__main__":
         job.join()
     t2 = time.time()
     print "Multicore contiguity check took {} seconds".format(t2-t1)
-
+    '''
     t1 = time.time()
     w = {}
     nonzero =np.transpose(np.nonzero(npcontmatrix))
@@ -245,6 +246,6 @@ if __name__ == "__main__":
         w[i] = neigh[:,1].tolist()
     t2 = time.time()
     print "Generating a W from a sparse matrix took {} seconds".format(t2-t1)
-
+    '''
     tb = time.time()
     print "Total processing time was {} seconds".format(tb-ta)

@@ -6,6 +6,7 @@ import warnings
 
 #Suppress the divide by zero errors
 warnings.filterwarnings('ignore', category=RuntimeWarning)
+numpy.set_printoptions(linewidth = 200, suppress = True)
 
 def fisher_jenks(values, classes=5, cores=None, sort=True):
     '''Fisher-Jenks Optimal Partitioning of an ordered array into k classes
@@ -57,7 +58,7 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
         for x in range(0,len(values)):
             varMat[x] = values[:]
             varMat[x][0:x] = 0
-
+        print varMat
         errCtypes = multiprocessing.RawArray(ctypes.c_double, classes*numVal)
         errorMat = numpy.frombuffer(errCtypes)
         errorMat.shape = (classes, numVal)
@@ -103,7 +104,7 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
             n.resize(arrRow.shape[0])
             n[arrRow.shape[0]-lenN:] =  n[:lenN-arrRow.shape[0]]
             n[0:arrRow.shape[0]-lenN] = 0
-
+        print arrRow
         return ((numpy.cumsum(numpy.square(arrRow))) - \
                 ((numpy.cumsum(arrRow)*numpy.cumsum(arrRow)) / (n)))
 
@@ -117,14 +118,15 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
         if stop+1 > lenrow:
             stop = lenrow-1
         while y <= stop:
+            print sharedVar[:,y+row][row:y+row+1]
             sharedErrRow[y] = numpy.amin(sharedErr[row-1][row-1:y+row] + sharedVar[:,y+row][row:y+row+1])
             y+=1
 
     if sort:
-	values.sort()
+        values.sort()
 
     if cores == None:
-	cores = multiprocessing.cpu_count()
+        cores = multiprocessing.cpu_count()
 
     numVal = len(values)
 
@@ -133,7 +135,7 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
 
     #Calculate the number of cores over which to multiprocess
     if cores > len(values):
-	cores = len(values)
+        cores = len(values)
     step = numVal // cores
 
     t0 = time.time()
@@ -141,15 +143,14 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
 
     #Calculate the variance matrix
     for i in range(0,len(values),step):
-	p = multiprocessing.Process(target=fj,args=(sharedVar,slice(i, i+step),values, i))
-	jobs.append(p)
+        p = multiprocessing.Process(target=fj,args=(sharedVar,slice(i, i+step),values, i))
+        jobs.append(p)
     for job in jobs:
-	job.start()
+        job.start()
     for job in jobs:
-	job.join()
+        job.join()
     del jobs[:], p, job
     t1 = time.time()
-
     #Calculate the error matrix
     sharedErr[0] = sharedVar[0]
 
@@ -197,7 +198,9 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
             right -= 1
         j -=1
     t3 = time.time()
-
+    print
+    print sharedVar
+    print sharedErr
     return pivots
 
 def _test():
@@ -206,4 +209,7 @@ def _test():
 
 #Not called by time_test.py
 if __name__ == '__main__':
-    _test()
+    #_test()
+    x = [12,10.8, 11, 10.8, 10.8, 10.8, 10.6, 10.8, 10.3, 10.3, 10.3,10.4, 10.5, 10.2, 10.0, 9.9]
+    p1 = fisher_jenks(x, 5)
+

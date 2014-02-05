@@ -37,12 +37,10 @@ def allocate(values, classes):
     initarr(errormatrix, val)
     return pivotmatrix
 
-def err(row, y, step, lenrow):
-    stop = y + step
-    if stop + 1 > lenrow:
-        stop = lenrow - 1
-
-    while y <= stop:
+def err(row, y, stop, lenrow):
+    if stop > lenrow:
+        sop = lenrow
+    while y < stop:
         err = sharederror[row-1][row-1:y+row]
         diam = np.zeros(err.shape)
         #diam is a column from the diameter matrix.
@@ -82,10 +80,29 @@ def main(values, classes, sort=True):
     for x in sharederror[row:]:
         errorrow = x[row:]
         init_error_row(errorrow)
-        step = len(errorrow) // cores
 
-        for y in range(0,len(errorrow), step + 1):
-            p = mp.Process(target=err,args=(row, y, step, len(errorrow)))
+        #Computations is the cumsum of all computations per row
+        computations = np.cumsum(np.array([i+1 for i in range(len(errorrow))]))
+        step = computations[-1] / cores
+        #Every step computations I need to farm out to another core.
+        starts = [0]
+        stops = []
+        comp_counter = 0
+        for j in [i+1 for i in range(len(errorrow))]:
+            if comp_counter + j < step:
+                comp_counter += j
+            else:
+                stops.append(j)
+                starts.append(j)
+                comp_counter = 0
+        stops.append(len(errorrow))
+        offsets = zip(starts,stops)
+        #step = len(errorrow) // cores
+
+        for y in offsets:
+            start = y[0]
+            stop = y[1]
+            p = mp.Process(target=err,args=(row,start, stop, len(errorrow)))
             jobs.append(p)
 
         for j in jobs:

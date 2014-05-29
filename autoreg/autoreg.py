@@ -97,6 +97,7 @@ def populatesearchtree(searchtree, results):
 
 
 def loadW(datafile, adjacency):
+    t1 = time.time()
     datafile = datafile.replace('.dbf', '.shp')
     basefile = datafile.split('.')[0]
 
@@ -107,9 +108,12 @@ def loadW(datafile, adjacency):
         with open(baseW, 'rb') as f:
             w = cPickle.load(f)
         if not w.adjacency == adjacency:
+            print w.adjacency, adjacency
             regenerateW = True
+    else:
+        regenerateW = True
 
-    baseGWK = baseW + '_GWK.pkl'
+    baseGWK = basefile + '_GWK.pkl'
     if not os.path.exists(baseGWK):
         regenerateW = True
     else:
@@ -122,7 +126,8 @@ def loadW(datafile, adjacency):
             w = cPickle.load(f)
         with open(gwkf, 'rb') as f:
             gwk = cPickle.load(f)
-
+    t2 = time.time()
+    print "W: ",t2 - t1
     return w, gwk
 
 def traversetree(searchtree, opvalue, combo):
@@ -205,7 +210,7 @@ def main(dep, indep, opvalue=0.01, combo=False, datafile='columbus.dbf', adjacen
     if rank == 0:
         #Read the data
         db = ps.open(datafile, 'r')
-
+    
         y = np.array(db.by_col(dep)).reshape(-1, 1)
 
         #y = np.array(db.by_col('CRIME')).reshape((49,1))
@@ -220,10 +225,10 @@ def main(dep, indep, opvalue=0.01, combo=False, datafile='columbus.dbf', adjacen
         w, gwk = loadW(datafile, adjacency)
 
         #Def. variables
-        name_x = ['Income', 'Housing Value']
-        name_y = 'Crime'
-        name_w = 'Queen'
-        name_ds = 'Columbus'
+        name_x = indep
+        name_y = dep
+        name_w = adjacency
+        name_ds = datafile
         name_gwk = 'Kernel from Docs'
 
         #Generate the search tree
@@ -303,8 +308,8 @@ def main(dep, indep, opvalue=0.01, combo=False, datafile='columbus.dbf', adjacen
         comm.send(None, dest=0, tag=3)
 
 if __name__ == '__main__':
-    #import time
-    #t1 = time.time()
+    import time
+    t1 = time.time()
     args = argumentparser.argparser()
     y = args['dependent_variable']
     x = args['independent_variable(s)']
@@ -314,7 +319,7 @@ if __name__ == '__main__':
 
     if datafile.split('.')[-1] == 'shp':
         datafile = datafile.replace('.shp', '.dbf')
-    results = main(y, x, datafile=datafile, adjacency='queen')
+    results = main(y, x, datafile=datafile, adjacency=adjacency)
 
     if results != None:
         #Unpack the class attributes into a dict
@@ -329,5 +334,5 @@ if __name__ == '__main__':
             pass
         with open(outjson, 'w') as f:
             f.write(jsonstring)
-        #t2 = time.time()
-        #print t2 - t1
+        t2 = time.time()
+        print t2 - t1

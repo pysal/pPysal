@@ -350,9 +350,9 @@ if __name__ == '__main__':
         results['regression2'] = r2
 
         outvect = np.column_stack((r1['u'], r2['u']))
-        header = ['r1_residuals', 'r2_residuals']
+        header = 'r1_residuals r2_residuals'
 
-        np.savetxt(outcsv, outvect, delimiter=',', fmt='%10.4f')
+        np.savetxt(outcsv, outvect, delimiter=',', fmt='%10.4f', header=header)
 
         jsonstring = json.dumps(results, cls=NumpyAwareJSONEncoder, indent=4)
         try:

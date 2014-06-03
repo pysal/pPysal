@@ -1,5 +1,6 @@
-baseW:  /home/jlaura/pysal_examples/NAT_W.pkl
-Exists
-baseGWK:  /home/jlaura/pysal_examples/NAT_GWK.pkl
-W:  1.62507009506
-19.9281420708
+Time W:  1.9431078434
+Time GWK:  102.920529127
+Dumping:  6.15512299538
+W:  114.406891823
+pbsout_summary.txt
+pbsout_vectors.csv

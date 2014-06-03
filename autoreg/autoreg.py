@@ -41,7 +41,6 @@ rank = comm.Get_rank()
 ncores = comm.Get_size()
 status = MPI.Status()
 
-
 class NumpyAwareJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):
@@ -103,7 +102,11 @@ def loadW(datafile, adjacency):
 
     regenerateW = False
 
-    baseW = basefile + '_W.pkl'
+    if adjacency == 'rook':
+        baseW = basefile + '_WR.pkl'
+    else:
+        baseW = basefile + '_WQ.pkl'
+
     if os.path.exists(baseW):
         with open(baseW, 'rb') as f:
             w = cPickle.load(f)
@@ -230,7 +233,6 @@ def main(dep, indep, opvalue=0.01, combo=False, datafile='columbus.dbf', adjacen
         name_w = adjacency
         name_ds = datafile
         name_gwk = 'Kernel from Docs'
-
         #Generate the search tree
         searchtree = {'r1':[ols.OLS, [y,x], {'w':w,'gwk':gwk,'spat_diag':True,'name_y':name_y,'name_x':name_x,'name_w':name_w,'name_gwk':name_gwk,'name_ds':name_ds}],
                     'lme_lag_LT_opval':
@@ -316,17 +318,42 @@ if __name__ == '__main__':
     adjacency = args['adjacency']
     datafile = args['input']
     outjson = args['output']
-
+    
     if datafile.split('.')[-1] == 'shp':
         datafile = datafile.replace('.shp', '.dbf')
     results = main(y, x, datafile=datafile, adjacency=adjacency)
 
     if results != None:
+        #Setup output files
+        try:
+            baseout = outjson.split('.')[0]
+            outsummary = baseout + '_summary.txt'
+            outcsv = baseout + '_vectors.csv'
+        except:
+            outsummary = outjson + '_summary.txt'
+            outcsv = outjson + '_vectors.csv'
+        print outsummary
+        print outcsv
         #Unpack the class attributes into a dict
         r1 = vars(results['regression1'])
+        r1_summary = r1['summary']
         r2 = vars(results['regression2'])
+        r2_summary = r2['summary']
+
+        #Write the summary information
+        with open(outsummary, 'w') as outtxt:
+            outtxt.write(r1_summary)
+            outtxt.write('\n')
+            outtxt.write(r2_summary)
+            
         results['regression1'] = r1
         results['regression2'] = r2
+
+        outvect = np.column_stack((r1['u'], r2['u']))
+        header = ['r1_residuals', 'r2_residuals']
+
+        np.savetxt(outcsv, outvect, delimiter=',', fmt='%10.4f')
+
         jsonstring = json.dumps(results, cls=NumpyAwareJSONEncoder, indent=4)
         try:
             os.remove(outjson)
@@ -334,5 +361,6 @@ if __name__ == '__main__':
             pass
         with open(outjson, 'w') as f:
             f.write(jsonstring)
+        with open(outjson + '_done', 'w') as f:
+	    f.write('done');
         t2 = time.time()
-        print t2 - t1

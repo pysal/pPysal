@@ -18,7 +18,7 @@ import scipy.spatial
 
 
 #Hardcoded paths to my data for testing
-shapefile = ps.open('/home/jlaura/Downloads/julia/us_tracts_data.shp')
+shapefile = '/home/jlaura/Downloads/julia/us_tracts_data.shp'
 subset = '/home/jlaura/Downloads/julia/subset.shp'
 tiny = '/home/jlaura/Downloads/julia/tiny.shp'
 a = '/home/jlaura/Downloads/julia/25.shp'
@@ -26,12 +26,13 @@ a = '/home/jlaura/Downloads/julia/25.shp'
 #Hardcoded parameters
 k = 2
 function = 'triangular'
-fixed = True
+fixed = False
 diagonal = False
 
+ta = time.time()
 #Get the centroids from the polys
 t1 = time.time()
-points = get_points_array_from_shapefile(subset)
+points = get_points_array_from_shapefile(shapefile)
 t2 = time.time()
 print "Generating points array took {} seconds.".format(t2 - t1)
 
@@ -211,8 +212,10 @@ class Kernel(W):
 pickle(MethodType, _pickle_method, _unpickle_method)
 t1 = time.time()
 w = Kernel(points, k=k, function=function, fixed=fixed,
-            diagonal=diagonal, ncores=8)
+            diagonal=diagonal, ncores=6)
 t2 = time.time()
 
 print "In total, Kernel weights took {} seconds".format(t2 - t1)
 print
+tb = time.time()
+print "Total runtime was {} seconds".format(tb - ta)

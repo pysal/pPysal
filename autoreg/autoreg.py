@@ -348,9 +348,17 @@ if __name__ == '__main__':
             
         results['regression1'] = r1
         results['regression2'] = r2
+        reg1 = r1['u'][:,0]
+        reg2 = r2['u'][:,0]
+        reg1class = ps.esda.mapclassify.Quantiles(reg1, k=4).yb
+        reg2class = ps.esda.mapclassify.Quantiles(reg2, k=4).yb
+       
+        print r1['u'].shape
+        print r2['u'].shape
+        print reg1class
 
-        outvect = np.column_stack((r1['u'], r2['u']))
-        header = 'r1_residuals r2_residuals'
+        outvect = np.column_stack((reg1,reg1class,reg2, reg2class))
+        header = 'r1_residuals r1_residuals_bins r2_residuals r2_residuals_bins'
 
         np.savetxt(outcsv, outvect, delimiter=',', fmt='%10.4f', header=header)
 

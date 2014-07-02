@@ -5,7 +5,7 @@
 #PBS -o out
 #PBS -e err
 #PBS -A Jay
-#PBS -l walltime=00:10:00
+#PBS -l walltime=00:20:00
 use openmpi-1.6.4
 cd $PBS_O_WORKDIR
-/packages/openmpi-1.6.4/bin/mpiexec -n 16 python autoreg.py ~/pysal_examples/NAT.dbf pbsout.json HR70 HR60 SOUTH
+/packages/openmpi-1.6.4/bin/mpiexec -n 16 python autoreg.py ~/pysal_examples/columbus.dbf pbsout.json HOVAL INC CRIME

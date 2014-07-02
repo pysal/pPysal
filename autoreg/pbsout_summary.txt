@@ -2,70 +2,67 @@ REGRESSION
 ----------
 SUMMARY OF OUTPUT: ORDINARY LEAST SQUARES
 -----------------------------------------
-Data set            :/home/jlaura/pysal_examples/NAT.shp
+Data set            :/home/jlaura/pysal_examples/columbus.shp
 Weights matrix      :       QUEEN
-Dependent Variable  :        HR70                Number of Observations:        3085
-Mean dependent var  :      6.3844                Number of Variables   :           3
-S.D. dependent var  :      7.3525                Degrees of Freedom    :        3082
-R-squared           :      0.3532
-Adjusted R-squared  :      0.3528
-Sum squared residual:  107825.106                F-statistic           :    841.6640
-Sigma-square        :      34.985                Prob(F-statistic)     :  2.239e-292
-S.E. of regression  :       5.915                Log likelihood        :   -9859.407
-Sigma-square ML     :      34.951                Akaike info criterion :   19724.814
-S.E of regression ML:      5.9120                Schwarz criterion     :   19742.917
+Dependent Variable  :       HOVAL                Number of Observations:          49
+Mean dependent var  :     38.4362                Number of Variables   :           3
+S.D. dependent var  :     18.4661                Degrees of Freedom    :          46
+R-squared           :      0.3495
+Adjusted R-squared  :      0.3212
+Sum squared residual:   10647.015                F-statistic           :     12.3582
+Sigma-square        :     231.457                Prob(F-statistic)     :   5.064e-05
+S.E. of regression  :      15.214                Log likelihood        :    -201.368
+Sigma-square ML     :     217.286                Akaike info criterion :     408.735
+S.E of regression ML:     14.7406                Schwarz criterion     :     414.411
 
 ------------------------------------------------------------------------------------
             Variable     Coefficient       Std.Error     t-Statistic     Probability
 ------------------------------------------------------------------------------------
-            CONSTANT       1.9959353       0.1515971      13.1660489       0.0000000
-                HR60       0.4659586       0.0211515      22.0295887       0.0000000
-               SOUTH       5.0028412       0.2398212      20.8607168       0.0000000
+            CONSTANT      46.4281827      13.1917570       3.5194844       0.0009867
+               CRIME      -0.4848885       0.1826729      -2.6544086       0.0108745
+                 INC       0.6289840       0.5359104       1.1736736       0.2465669
 ------------------------------------------------------------------------------------
 
 REGRESSION DIAGNOSTICS
-MULTICOLLINEARITY CONDITION NUMBER            2.777
+MULTICOLLINEARITY CONDITION NUMBER           12.538
 
 TEST ON NORMALITY OF ERRORS
 TEST                             DF        VALUE           PROB
-Jarque-Bera                       2       22167.648           0.0000
+Jarque-Bera                       2          39.706           0.0000
 
 DIAGNOSTICS FOR HETEROSKEDASTICITY
 RANDOM COEFFICIENTS
 TEST                             DF        VALUE           PROB
-Breusch-Pagan test                2        4361.943           0.0000
-Koenker-Bassett test              2         598.496           0.0000
+Breusch-Pagan test                2           5.767           0.0559
+Koenker-Bassett test              2           2.270           0.3214
 
 DIAGNOSTICS FOR SPATIAL DEPENDENCE
 TEST                           MI/DF       VALUE           PROB
-Lagrange Multiplier (lag)         1         244.218           0.0000
-Robust LM (lag)                   1         246.004           0.0000
-Lagrange Multiplier (error)       1         110.524           0.0000
-Robust LM (error)                 1         112.310           0.0000
-Lagrange Multiplier (SARMA)       2         356.528           0.0000
+Lagrange Multiplier (lag)         1           0.982           0.3218
+Robust LM (lag)                   1           1.094           0.2957
+Lagrange Multiplier (error)       1           3.097           0.0784
+Robust LM (error)                 1           3.209           0.0732
+Lagrange Multiplier (SARMA)       2           4.191           0.1230
 
 ================================ END OF REPORT =====================================
 REGRESSION
 ----------
-SUMMARY OF OUTPUT: SPATIAL TWO STAGE LEAST SQUARES
---------------------------------------------------
-Data set            :/home/jlaura/pysal_examples/NAT.shp
+SUMMARY OF OUTPUT: SPATIALLY WEIGHTED LEAST SQUARES (HOM)
+---------------------------------------------------------
+Data set            :/home/jlaura/pysal_examples/columbus.shp
 Weights matrix      :       QUEEN
-Dependent Variable  :        HR70                Number of Observations:        3085
-Mean dependent var  :      6.3844                Number of Variables   :           4
-S.D. dependent var  :      7.3525                Degrees of Freedom    :        3081
-Pseudo R-squared    :      0.4043
-Spatial Pseudo R-squared:  0.4171
+Dependent Variable  :       HOVAL                Number of Observations:          49
+Mean dependent var  :     38.4362                Number of Variables   :           3
+S.D. dependent var  :     18.4661                Degrees of Freedom    :          46
+Pseudo R-squared    :      0.3495
+N. of iterations    :           1
 
-HAC Standard Errors; Kernel Weights: Kernel from Docs
 ------------------------------------------------------------------------------------
             Variable     Coefficient       Std.Error     z-Statistic     Probability
 ------------------------------------------------------------------------------------
-            CONSTANT       0.1270857       0.1375293       0.9240625       0.3554538
-                HR60       0.2550462       0.0724310       3.5212322       0.0004295
-               SOUTH       0.3287068       0.3652426       0.8999684       0.3681371
-              W_HR70       0.7763924       0.0856845       9.0610633       0.0000000
+            CONSTANT      47.6952597      12.3899085       3.8495248       0.0001183
+               CRIME      -0.5505654       0.1788491      -3.0783797       0.0020813
+                 INC       0.7105116       0.5028366       1.4130071       0.1576536
+              lambda       0.3603637       0.1784451       2.0194661       0.0434388
 ------------------------------------------------------------------------------------
-Instrumented: W_HR70
-Instruments: W_HR60, W_SOUTH
 ================================ END OF REPORT =====================================

@@ -10,7 +10,7 @@ kdtree.node = kdtree.KDTree.node
 kdtree.leafnode = kdtree.KDTree.leafnode
 kdtree.innernode = kdtree.KDTree.innernode
 
-def main(datafile, adjacency):
+def main(datafile, adjacency=None):
     import time
     t1 = time.time()
     if adjacency.lower() == 'queen':
@@ -21,30 +21,23 @@ def main(datafile, adjacency):
     w.adjacency = adjacency
     t2 = time.time()
     print "Time W: ", t2 - t1
-
-    gwk = ps.weights.user.kernelW_from_shapefile(datafile, 5, diagonal=True)
-    gwk.adjacency = adjacency
-    t3 = time.time()
-    print "Time GWK: ", t3 - t2
-    #Write W to disk
-    wout = datafile.split('.')[0] + '_W.pkl'
+ 
     gwkout = datafile.split('.')[0] + '_GWK.pkl'
+    if not os.path.exists(gwkout):
+        gwk = ps.weights.user.kernelW_from_shapefile(datafile, 5, diagonal=True)
+        gwk.adjacency = adjacency
+        t3 = time.time()
+        print "Time GWK: ", t3 - t2
 
-    try:
-        os.remove(wout)
-    except OSError:
-        pass
-
-    try:
-        os.remove(gwkout)
-    except OSError:
-        pass
+    #Write W to disk
+    if adjacency == 'rook':
+        wout = datafile.split('.')[0] + '_WR.pkl'
+    else:
+        wout = datafile.split('.')[0] + '_WQ.pkl'
 
     t1 = time.time()
     with open(wout, 'wb') as f:
         cPickle.dump(w, f, cPickle.HIGHEST_PROTOCOL)
-    with open(gwkout, 'wb') as f:
-        cPickle.dump(gwk, f, cPickle.HIGHEST_PROTOCOL)
     t2 = time.time()
     print "Dumping: ",t2 - t1
 
@@ -61,8 +54,28 @@ def main(datafile, adjacency):
 
 if __name__ == '__main__':
     datafile = sys.argv[1]
-    adjacency = sys.argv[2]
+    wq = ps.weights.user.queen_from_shapefile(datafile) 
+    wr = ps.weights.user.rook_from_shapefile(datafile)
 
-    main(datafile, adjacency)
+    wq.transform = 'r'
+    wq.adjacency = 'Queen'
 
+    wr.transform = 'r'
+    wr.adjacency = 'Rook'
+
+    gwk = ps.weights.user.kernelW_from_shapefile(datafile, 5, diagonal=True)
+    
+    #Write W to disk
+    wqout = datafile.split('.')[0] + '_WQ.pkl'
+    wrout = datafile.split('.')[0] + '_WR.pkl'
+    gwkout = datafile.split('.')[0] + '_GWK.pkl'
+
+    with open(wqout, 'wb') as f:
+        cPickle.dump(wq, f, cPickle.HIGHEST_PROTOCOL)
+    with open(wrout, 'wb') as f:
+        cPickle.dump(wr, f, cPickle.HIGHEST_PROTOCOL)
+    with open(gwkout, 'wb') as f:
+        cPickle.dump(gwk, f, cPickle.HIGHEST_PROTOCOL)
+    with open(datafile.split('.')[0] + '_done', 'w') as f:
+        f.write('done');
 

@@ -1,4 +1,4 @@
-import numpy
+import numpy as np
 import time
 import multiprocessing
 import ctypes
@@ -6,7 +6,20 @@ import warnings
 
 #Suppress the divide by zero errors
 warnings.filterwarnings('ignore', category=RuntimeWarning)
-numpy.set_printoptions(linewidth = 200, suppress = True)
+np.set_printoptions(linewidth = 200, suppress = True)
+
+def fj_generate_sample(y, pct=0.10, random=True):
+    n = y.size
+    if random:
+        choicevector = np.arange(n)
+        ids = np.random.choice(choicevector,n * pct,replace=False)
+        #ids = np.random.random_integers(0, n - 1, n * pct)
+    else:
+        ids = np.arange(int(n*pct))
+    yr = y[ids]
+    yr[-1] = max(y)  # make sure we have the upper bound
+    yr[0] = min(y)  # make sure we have the min
+    return yr
 
 def fisher_jenks(values, classes=5, cores=None, sort=True):
     '''Fisher-Jenks Optimal Partitioning of an ordered array into k classes
@@ -46,13 +59,13 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
     def allocate(values, classes):
         '''This function allocates memory for the variance matrix, error matrix,
         and pivot matrix.  It also moves the variance matrix and error matrix from
-        numpy types to a ctypes, shared memory array.'''
+        np types to a ctypes, shared memory array.'''
 
         numClass = classes
         numVal = len(values)
 
         varCtypes = multiprocessing.RawArray(ctypes.c_double, numVal*numVal)
-        varMat = numpy.frombuffer(varCtypes)
+        varMat = np.frombuffer(varCtypes)
         varMat.shape = (numVal,numVal)
 
         for x in range(0,len(values)):
@@ -60,11 +73,11 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
             varMat[x][0:x] = 0
         print varMat
         errCtypes = multiprocessing.RawArray(ctypes.c_double, classes*numVal)
-        errorMat = numpy.frombuffer(errCtypes)
+        errorMat = np.frombuffer(errCtypes)
         errorMat.shape = (classes, numVal)
 
         pivotShape = (classes, numVal)
-        pivotMat = numpy.ndarray(pivotShape, dtype=numpy.float)
+        pivotMat = np.ndarray(pivotShape, dtype=np.float)
 
         #Initialize the arrays as globals.
         initArr(varMat, errorMat)
@@ -88,8 +101,8 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
         '''This function facilitates passing multiple rows to each process and
         then performing multiple vector calculations along individual rows.'''
         arr = sharedVar
-        arr[i] = numpy.apply_along_axis(calcVar, 1, arr[i], len(values))
-        arr[i][numpy.isnan(arr[i])] = 0
+        arr[i] = np.apply_along_axis(calcVar, 1, arr[i], len(values))
+        arr[i][np.isnan(arr[i])] = 0
 
     def calcVar(arrRow, lenValues):
         '''This function calculates the diameter matrix.  It is called by fj.
@@ -98,15 +111,15 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
         of elements summed for each index.'''
 
         lenN = (arrRow != 0).sum()
-        n = numpy.arange(1, lenN+1)
+        n = np.arange(1, lenN+1)
 
         if lenN != lenValues:
             n.resize(arrRow.shape[0])
             n[arrRow.shape[0]-lenN:] =  n[:lenN-arrRow.shape[0]]
             n[0:arrRow.shape[0]-lenN] = 0
         print arrRow
-        return ((numpy.cumsum(numpy.square(arrRow))) - \
-                ((numpy.cumsum(arrRow)*numpy.cumsum(arrRow)) / (n)))
+        return ((np.cumsum(np.square(arrRow))) - \
+                ((np.cumsum(arrRow)*np.cumsum(arrRow)) / (n)))
 
     def err(row,y,step, lenrow):
         '''This function computes the error on a segment of each error row, from the error matrix.
@@ -119,7 +132,7 @@ def fisher_jenks(values, classes=5, cores=None, sort=True):
             stop = lenrow-1
         while y <= stop:
             print sharedVar[:,y+row][row:y+row+1]
-            sharedErrRow[y] = numpy.amin(sharedErr[row-1][row-1:y+row] + sharedVar[:,y+row][row:y+row+1])
+            sharedErrRow[y] = np.amin(sharedErr[row-1][row-1:y+row] + sharedVar[:,y+row][row:y+row+1])
             y+=1
 
     if sort:

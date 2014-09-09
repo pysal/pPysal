@@ -10,7 +10,7 @@ from numpy.random import RandomState
 
 class IFS(mp.Process):
 
-    def __init__(self, attribute, w, iterations=100, floor=5, lock=None, pid=None, minp = 0):
+    def __init__(self, attribute, w, iterations=100, floor=3, lock=None, pid=None, minp = 0):
         mp.Process.__init__(self)
         self.attribute = attribute
         self.w = w

@@ -1,6 +1,9 @@
 import ctypes
+from functools import partial
 import multiprocessing as mp
 import random
+import sys
+
 from mpi4py import MPI
 
 import pysal as ps
@@ -10,6 +13,24 @@ import numpy as np
 from numpy.random import RandomState
 
 from ifs import IFS, initshared_soln
+
+def assignenclaves(rng, w, z):
+    start, stop = rng
+    for x in range(start,stop):
+        soln_column = soln_space[x][1:]
+        enclaves = np.where(soln_column == 0)[0]
+        #print soln_column[enclaves], enclaves
+        for e in enclaves:
+            nid = set()
+            potentialneighbors = w[e].keys()
+            for p in potentialneighbors:
+                nid.add(soln_column[p])
+            nid.discard(0)
+            reg = random.sample(nid, 1)[0]
+            #print e, reg
+            soln_space[x,e + 1] = reg
+            #soln_column[e] = reg
+    return
 
 def checkcontiguity(idx, w):
     """
@@ -56,13 +77,13 @@ if rank == 0:
     """
     w = ps.lat2W(10,10)
     random_int = RandomState(123456789)
-    attribute = random_int.random_sample((w.n, 2))
-    numifs =  16
+    attribute = random_int.random_sample((w.n, 1))
+    numifs =  8
     data = {'w':w,
             'numifs':numifs}
 else:
     data = None
-    attribute = np.empty((100, 2), dtype=np.float)
+    attribute = np.empty((100, 1), dtype=np.float)
 
 #Broadcast 2 sets of data, a list of Python objects and an array of attribute information
 data = comm.bcast(data, root=0) #Inefficient Python object, better to get full, pass and reform?
@@ -90,7 +111,7 @@ window = MPI.Win.Create(soln_space, soln_space.size, info, comm)
 
 jobs = []
 for i in xrange(nlocalcores):
-    p = IFS(attribute, w, lock=solution_lock, pid=i)
+    p = IFS(attribute, w, lock=solution_lock, pid=i, floor=5)
     jobs.append(p)
     p.start()
 for j in jobs:
@@ -121,19 +142,19 @@ for r in xrange(nmanagers):
         newlocalmax = max(soln_space[:,0])
         print "I am manager {} and I initially had {} regions.  I now have {} regions.".format(rank, localmax, newlocalmax)
 
-
-#Ensure that all IFS are updated
 comm.Barrier()
-'''
-successes = []
-def countsuccesses(r):
-    successes.extend(r)
 
+starts = range(0,numifs, 2)
+stops = starts[1:] + [numifs]
+offsets = zip(starts, stops)
 pool = mp.Pool(nlocalcores)
-for i in range(numifs):
-    pool.apply_async(checkcontiguity, args=(i, w), callback=countsuccesses)
+for i in offsets:
+    result = pool.apply_async(assignenclaves, args=(i, w, attribute))
+
+result.get()
 pool.close()
 pool.join()
 
-print successes
-'''
+if len(np.where(soln_space == 0)[0]) > 0:
+    print "Error in enclaves assignment! Some unit was unassigned."
+    sys.exit()

@@ -13,6 +13,7 @@ import numpy as np
 from numpy.random import RandomState
 
 from ifs import IFS, initshared_soln
+from ls import LocalSearch, initshared_localsoln
 
 def assignenclaves(rng, w, z):
     start, stop = rng
@@ -23,10 +24,15 @@ def assignenclaves(rng, w, z):
         for e in enclaves:
             nid = set()
             potentialneighbors = w[e].keys()
+            if len(potentialneighbors) == 0:
+                print "ERROR NO NEIGHBORS!!!"
             for p in potentialneighbors:
                 nid.add(soln_column[p])
             nid.discard(0)
-            reg = random.sample(nid, 1)[0]
+            try:
+                reg = random.sample(nid, 1)[0]
+            except:
+                print nid, potentialneighbors
             #print e, reg
             soln_space[x,e + 1] = reg
             #soln_column[e] = reg
@@ -37,22 +43,20 @@ def checkcontiguity(idx, w):
     Check the contiguity of a solution in the shared memory space. Called by
     the test script to validate IFS generation.
     """
-    soln_column = soln_space[idx]
-    soln = soln_column[1:]
-    nregions = soln_column[0]
     valid = True
-    print soln, nregions
-    #for i in xrange(1, nregions + 1):
-        #ids = np.where(soln == i)[0]
-        #print i
-        #if is_component(w, ids) != True:
-            #valid = False
+    start, stop = idx
+    for idx in range(start,stop):
+        soln_column = soln_space[idx]
+        soln = soln_column[1:]
+        nregions = soln_column[0]
+        for i in xrange(1, nregions + 1):
+            ids = np.where(soln == i)[0]
+            if is_component(w, ids) != True:
+                valid = False
     if valid == True:
-        print 'V'
-        return 1
+        pass
     else:
-        print 'E'
-        return 0
+        print "FAILURE:", soln_column.reshape(10,10)
 
 def f(idx, w, rank):
     print "I am shared memory worker {}, managed by {}, and I see a W object with {} entries.".format(idx, rank, w.n)
@@ -75,10 +79,10 @@ if rank == 0:
     2. Generates the W Object
     3. Sends the W object and attribute vector to all children
     """
-    w = ps.lat2W(10,10)
+    w = ps.lat2W(8,8)
     random_int = RandomState(123456789)
     attribute = random_int.random_sample((w.n, 1))
-    numifs =  8
+    numifs =  16
     data = {'w':w,
             'numifs':numifs}
 else:
@@ -111,7 +115,7 @@ window = MPI.Win.Create(soln_space, soln_space.size, info, comm)
 
 jobs = []
 for i in xrange(nlocalcores):
-    p = IFS(attribute, w, lock=solution_lock, pid=i, floor=5)
+    p = IFS(attribute, w, lock=solution_lock, pid=i, floor=7)
     jobs.append(p)
     p.start()
 for j in jobs:
@@ -123,7 +127,9 @@ localmax = np.max(soln_space[:,0])
 globalmax = comm.allgather(localmax)
 max_globalmax = max(globalmax)
 
-#
+#Synchronize after IFS are generate without enclaves assignment
+comm.Barrier()
+
 group = window.Get_group()
 group.Free()
 
@@ -142,19 +148,41 @@ for r in xrange(nmanagers):
         newlocalmax = max(soln_space[:,0])
         print "I am manager {} and I initially had {} regions.  I now have {} regions.".format(rank, localmax, newlocalmax)
 
+#Synchronize now that all solutions are standardized
 comm.Barrier()
 
+#Enclave assignment
 starts = range(0,numifs, 2)
 stops = starts[1:] + [numifs]
 offsets = zip(starts, stops)
 pool = mp.Pool(nlocalcores)
 for i in offsets:
-    result = pool.apply_async(assignenclaves, args=(i, w, attribute))
+    result = pool.apply(assignenclaves, args=(i, w, attribute))
 
-result.get()
 pool.close()
 pool.join()
 
 if len(np.where(soln_space == 0)[0]) > 0:
     print "Error in enclaves assignment! Some unit was unassigned."
-    sys.exit()
+    print soln_space
+
+pool = mp.Pool(nlocalcores)
+for i in offsets:
+    result = pool.apply(checkcontiguity, args=(i, w))
+
+pool.close()
+pool.join()
+
+comm.Barrier()
+
+#Local Search
+initshared_localsoln(csoln_space)
+jobs = []
+for i in xrange(nlocalcores):
+    p = LocalSearch(attribute, w, lock=solution_lock, pid=i, floor=7)
+    jobs.append(p)
+    p.start()
+for j in jobs:
+    j.join()
+
+

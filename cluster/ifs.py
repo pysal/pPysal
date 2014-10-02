@@ -39,7 +39,7 @@ class IFS(mp.Process):
                None)
 
     def run(self):
-        solnspace = np.frombuffer(shared_solnspace.get_obj(), dtype=np.int32)
+        solnspace = np.frombuffer(shared_solnspace.get_obj(), dtype=np.float32)
         solnspace.shape = (-1, self.w.n + 1)
         while self.currentiteration < self.iterations:
             self.currentiteration += 1

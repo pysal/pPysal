@@ -5,7 +5,7 @@
 #PBS -o out
 #PBS -e err
 #PBS -A Jay
-#PBS -l walltime=00:20:00
+#PBS -l walltime=10:00:00
 export OMP_NUM_THREADS=8
 use openmpi-1.8.1
 cd $PBS_O_WORKDIR

@@ -19,7 +19,7 @@ def assignenclaves(rng, w, z):
     start, stop = rng
     for x in range(start,stop):
         soln_column = soln_space[x][1:]
-        enclaves = np.where(soln_column == 0)[0]
+        enclaves = np.where(soln_column == 0)[0].tolist()
         #print soln_column[enclaves], enclaves
         for e in enclaves:
             nid = set()
@@ -31,12 +31,30 @@ def assignenclaves(rng, w, z):
             nid.discard(0)
             try:
                 reg = random.sample(nid, 1)[0]
+                soln_space[x,e + 1] = reg
             except:
-                print nid, potentialneighbors
+                #Situation where an enclave's only neighbors are enclaves
+                enclaves.append(e)
             #print e, reg
-            soln_space[x,e + 1] = reg
-            #soln_column[e] = reg
+            #soln_column[e] = regi
+           
+            #Replace the region count with the Obj. function value
+            wss = objective_func(soln_column, z)
+            soln_space[x][0] = wss
     return
+
+def objective_func(regions, z):
+    """
+    Computes the global objective function value
+    """
+    wss = 0
+    for r in range(1, max(regions)):
+        ids = np.where(regions == r)[0]
+        m = z[ids]
+        var = m.var()
+        wss += np.sum(var * len(ids))
+    return wss
+
 
 def checkcontiguity(idx, w):
     """
@@ -45,10 +63,11 @@ def checkcontiguity(idx, w):
     """
     valid = True
     start, stop = idx
+    
     for idx in range(start,stop):
         soln_column = soln_space[idx]
         soln = soln_column[1:]
-        nregions = soln_column[0]
+        nregions = int(soln_column[0])
         for i in xrange(1, nregions + 1):
             ids = np.where(soln == i)[0]
             if is_component(w, ids) != True:
@@ -82,21 +101,20 @@ if rank == 0:
     w = ps.lat2W(8,8)
     random_int = RandomState(123456789)
     attribute = random_int.random_sample((w.n, 1))
-    numifs =  16
+    numifs =  32
+
     data = {'w':w,
             'numifs':numifs}
 else:
     data = None
-    attribute = np.empty((100, 1), dtype=np.float)
 
 #Broadcast 2 sets of data, a list of Python objects and an array of attribute information
 data = comm.bcast(data, root=0) #Inefficient Python object, better to get full, pass and reform?
-attribute = comm.Bcast([attribute, MPI.DOUBLE], root=0)
-
 if rank != 0:
     w = data['w']
     numifs = data['numifs']
-
+    attribute = np.empty((w.n, 1), dtype=np.float)
+comm.Bcast([attribute, MPI.DOUBLE])
 """
 for r in range(nmanagers):
     if r == rank:
@@ -104,12 +122,11 @@ for r in range(nmanagers):
 """
 
 solution_lock = mp.Lock()
-csoln_space = mp.Array(ctypes.c_int32, numifs * (w.n + 1), lock=solution_lock)
-soln_space = np.frombuffer(csoln_space.get_obj(), dtype=np.int32)
-soln_space[:] = 0
+csoln_space = mp.Array(ctypes.c_float, numifs * (w.n + 1), lock=solution_lock)
+soln_space = np.frombuffer(csoln_space.get_obj(), dtype=np.float32)
+soln_space[:] = 0.0
 soln_space.shape = (-1, w.n + 1)
 initshared_soln(csoln_space)
-
 #Create a put/get memory window on each machine
 window = MPI.Win.Create(soln_space, soln_space.size, info, comm)
 
@@ -125,7 +142,7 @@ for j in jobs:
 localmax = np.max(soln_space[:,0])
 #This is a Python type gather, I should move to a np array gather, maybe?
 globalmax = comm.allgather(localmax)
-max_globalmax = max(globalmax)
+max_globalmax = nregions = max(globalmax)
 
 #Synchronize after IFS are generate without enclaves assignment
 comm.Barrier()
@@ -146,12 +163,13 @@ if localmax <  max_globalmax:
 for r in xrange(nmanagers):
     if rank == r:
         newlocalmax = max(soln_space[:,0])
+        print "My soln space looks like: {}".format(soln_space[:,0])
         print "I am manager {} and I initially had {} regions.  I now have {} regions.".format(rank, localmax, newlocalmax)
 
 #Synchronize now that all solutions are standardized
 comm.Barrier()
 
-#Enclave assignment
+#Assign enclaves and replace region count with wss (at index 0)
 starts = range(0,numifs, 2)
 stops = starts[1:] + [numifs]
 offsets = zip(starts, stops)
@@ -164,7 +182,6 @@ pool.join()
 
 if len(np.where(soln_space == 0)[0]) > 0:
     print "Error in enclaves assignment! Some unit was unassigned."
-    print soln_space
 
 pool = mp.Pool(nlocalcores)
 for i in offsets:
@@ -179,10 +196,23 @@ comm.Barrier()
 initshared_localsoln(csoln_space)
 jobs = []
 for i in xrange(nlocalcores):
-    p = LocalSearch(attribute, w, lock=solution_lock, pid=i, floor=7)
+    p = LocalSearch(attribute, w, nregions,
+            lock=solution_lock,
+            pid=i,
+            floor=7,
+            intensification=0.5)
     jobs.append(p)
     p.start()
 for j in jobs:
     j.join()
 
+objfunc_values = soln_space[:,0]
+cbest = min(objfunc_values)
+cbest_idx = np.where(objfunc_values == cbest)[0]
+sol = soln_space[cbest_idx]
+sol = sol.ravel()[1:]
 
+print """I am manager {} and my best objective function value is: {}
+         My solution looks like:
+{}
+""".format(rank, cbest, sol.reshape(-1, 8))

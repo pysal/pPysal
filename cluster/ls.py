@@ -12,14 +12,20 @@ from numpy.random import RandomState
 
 class LocalSearch(mp.Process):
     """
-    Attributes
-    ----------
+    Class Attributes
+    ----------------
+    cbest                   float   the current best known solution
+
+    Instance Attributes
+    --------------------
 
     failures                int     the current number of failures for this iteration
     intensificationsize     int     the size of the soln space to propagate the best soln
     tabulist                deque   of tuples in the form (unit, move to region)
     
     """
+    cbest = 10.0
+
     def __init__(self ,attribute, w, nregions, lock = None, pid=None, floor=3,
             maxfailures=50, maxiterations=15, intensification=0.5):
         mp.Process.__init__(self)
@@ -67,6 +73,7 @@ class LocalSearch(mp.Process):
                 self.solncolumn.reshape(8,8), self.tabulength, self.maxfailures, self.wss)
 
     def localsearch(self):
+        altered = False
         while self.failures < self.maxfailures: 
             sln = self.solncolumn
             ids = np.arange(len(sln))
@@ -112,33 +119,58 @@ class LocalSearch(mp.Process):
                 #Check contiguity
                 contigious = check_contiguity(self.w, units_in_region, selectedunit)
                 if not contigious:
-                    self.failures += 1
-                    continue
-                #Check the tabu list
-                if (selectedunit, possibleswaps[k]) in self.tabulist:
-                    #TODO: Add an aspiration function here that allows a tabu move to procedd
-                    # if it is 'good enough'
+                    possibleswaps.pop(k, None)
                     self.failures += 1
                     continue
 
-                #The move is valid
-                self.tabulist.appendleft((selectedunit, possibleswaps[k]))
-                sln[selectedunit] = possibleswaps[k]  #where the value is the new region id
-                self.wss = k  #where k is the current wss
-                self.failures = 0
-        
-        with self.lock:
-            currentwss = self.solnspace[:,0][self.index]
-            maxwss = np.max(self.solnspace[:,0])
-                    
-            if self.wss < currentwss:
+            if not possibleswaps:
+                self.failures += 1
+
+            #Now possible swaps is a list of valid swaps that may or may not be improving
+            for k in sorted(possibleswaps):
+                if k < self.wss:
+                    #This is current best, tabu restrictions do not apply.
+                    self.tabulist.appendleft((selectedunit, possibleswaps[k]))
+                    sln[selectedunit] = possibleswaps[k]  #where the value is the new region id
+                    self.wss = k  #where k is the current wss
+                    self.failures = 0
+                    altered = True
+                    break
+                else:
+                    #Check the tabu list
+                    #TODO: Right now we take the first non-tabu move and assume that
+                    if (selectedunit, possibleswaps[k]) in self.tabulist:
+                        self.failures += 1
+                        continue
+                    else:
+                        #The move is valid
+                        self.tabulist.appendleft((selectedunit, possibleswaps[k]))
+                        sln[selectedunit] = possibleswaps[k]  #where the value is the new region id
+                        self.wss = k  #where k is the current wss
+                        self.failures = 0
+                        altered = True
+                        break
+
+        if altered == True:
+            with self.lock:
+                currentwss = self.solnspace[:,0][self.index]
+                maxwss = np.max(self.solnspace[:,0])
+                        
                 self.solnspace[self.index][0] = self.wss
                 self.solnspace[self.index][1:] = sln
-
+                '''
                 #Check to see if this is also a global best
                 if self.wss < maxwss:
-                    pass
-                    #If so, propagate to some % of the solution space
+                    sortedwss = np.argsort(self.solnspace[:,0])[::-1]
+                    idx = sortedwss[:self.intensificationsize]
+                    tmp = self.solnspace[idx]
+                    tmp[:,0] = self.wss
+                    tmp[:,1:] = sln
+                    self.solnspace[idx] = tmp
+                '''
+        else:
+            #TODO: Diversify the solution
+            pass
         return
 
     def run(self):

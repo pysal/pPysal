@@ -192,6 +192,8 @@ pool.join()
 
 comm.Barrier()
 
+initialbest = min(soln_space[:,0])
+
 #Local Search
 initshared_localsoln(csoln_space)
 jobs = []
@@ -200,7 +202,9 @@ for i in xrange(nlocalcores):
             lock=solution_lock,
             pid=i,
             floor=7,
-            intensification=0.5)
+            intensification=0.5,
+            maxfailures = 75,
+            maxiterations = 30)
     jobs.append(p)
     p.start()
 for j in jobs:
@@ -212,7 +216,9 @@ cbest_idx = np.where(objfunc_values == cbest)[0]
 sol = soln_space[cbest_idx]
 sol = sol.ravel()[1:]
 
-print """I am manager {} and my best objective function value is: {}
+print """Manager {}.
+         Initial Best: {} 
+         Local Search Best: {}
          My solution looks like:
 {}
-""".format(rank, cbest, sol.reshape(-1, 8))
+""".format(rank, initialbest, cbest, sol.reshape(-1, 8))

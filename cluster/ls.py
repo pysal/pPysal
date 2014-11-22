@@ -1,8 +1,9 @@
 import collections
+import copy
 import multiprocessing as mp
 from operator import gt, lt
 import random
-from random import randint, uniform
+from random import randint, uniform, shuffle
 
 import pysal as ps
 from pysal.region.components import check_contiguity
@@ -24,10 +25,9 @@ class LocalSearch(mp.Process):
     tabulist                deque   of tuples in the form (unit, move to region)
     
     """
-    cbest = 10.0
 
     def __init__(self ,attribute, w, nregions, lock = None, pid=None, floor=3,
-            maxfailures=50, maxiterations=15, intensification=0.5):
+            maxfailures=100, maxiterations=15, intensification=0.5):
         mp.Process.__init__(self)
         self.index = pid
         self.lock = lock
@@ -36,6 +36,7 @@ class LocalSearch(mp.Process):
         self.floor = floor
         self.maxiterations = maxiterations
         self.wss = 0
+        self.cbest = float('inf')
 
         #Shared memory setup
         self.solnspace = np.frombuffer(shared_solnspace.get_obj(), dtype=np.float32)
@@ -69,110 +70,124 @@ class LocalSearch(mp.Process):
             current tabu list length: {}
             current maximum number of failures: {}
             current obj. func value: {}
+            current iteration: {}
         """.format(self.index, self.index, self.solnspacesize,
-                self.solncolumn.reshape(8,8), self.tabulength, self.maxfailures, self.wss)
+                self.solncolumn.reshape(8,8), self.tabulength, self.maxfailures, self.wss,
+                self.maxiterations)
 
     def localsearch(self):
-        altered = False
-        while self.failures < self.maxfailures: 
-            sln = self.solncolumn
-            ids = np.arange(len(sln))
-            #Select a random atomic unit
-            selectedunit = self.randstate.choice(self.unitchooser)
-            
-            #Check the floor constraint
-            region_membership = sln[selectedunit]
-            
-            mask = sln[sln == region_membership]
-            unit_region_count = len(mask)
-            #units_in_region = np.where(sln == region_membership)[0].tolist()
-            units_in_region = ids[sln == region_membership].tolist()
-            if unit_region_count == self.floor:
-                #A move from this region would break the floor constraint
-                self.failures += 1
-                continue
-            
-            #Get the neighbors and remove the current region
-            neighborunits = self.w.neighbors[selectedunit]  #List of neighbors from the W Obj
-            neighborregions = set(sln[neighborunits]) #List of neighbor regions
-            #print "Regions: {}, Unit: {}".format(neighborregions, sln[selectedunit])
-            neighborregions.remove(sln[selectedunit]) #Remove the region the unit is currently in
-            
-            if not neighborregions:
-                #The unit is internal to the region
-                self.failures += 1
-                continue
+        '''
+        '''
+        swapping = True
+        swap_iteration = 0
+        total_moves = 0
 
-            possibleswaps = {}    
-            for n in neighborregions:
-                sln[selectedunit] = n
-                wss = self.objective_func(regions=sln)
-                possibleswaps[wss] = n
-                sln[selectedunit] = region_membership
-                
-            #If no swaps exist, get another atomic unit
-            if not possibleswaps:
-                self.failures += 1
-                continue
-            #Iterate through the swaps
-            for k in sorted(possibleswaps):
-                #Check contiguity
-                contigious = check_contiguity(self.w, units_in_region, selectedunit)
-                if not contigious:
-                    possibleswaps.pop(k, None)
-                    self.failures += 1
-                    continue
+        sln = self.solncolumn
+        ids = np.arange(len(sln))
 
-            if not possibleswaps:
-                self.failures += 1
+        k = int(self.nregions)
+        changed_regions = [1] * k
+        nr = range(k)
+        while swapping:
+            moves_made = 0
+            regionIds = [r+1 for r in nr if changed_regions[r]]
+            shuffle(regionIds)
+            changed_regions = [0] * k
+            
+            for seed in regionIds:
+                local_swapping = True
+                local_attempts = 0
+                while local_swapping:
+                    local_moves = 0
+                    members = ids[sln == seed].tolist()
+                    neighbors = set()
 
-            #Now possible swaps is a list of valid swaps that may or may not be improving
-            for k in sorted(possibleswaps):
-                if k < self.wss:
-                    #This is current best, tabu restrictions do not apply.
-                    self.tabulist.appendleft((selectedunit, possibleswaps[k]))
-                    sln[selectedunit] = possibleswaps[k]  #where the value is the new region id
-                    self.wss = k  #where k is the current wss
-                    self.failures = 0
-                    altered = True
-                    break
-                else:
-                    #Check the tabu list
-                    #TODO: Right now we take the first non-tabu move and assume that
-                    if (selectedunit, possibleswaps[k]) in self.tabulist:
-                        self.failures += 1
-                        continue
-                    else:
-                        #The move is valid
-                        self.tabulist.appendleft((selectedunit, possibleswaps[k]))
-                        sln[selectedunit] = possibleswaps[k]  #where the value is the new region id
-                        self.wss = k  #where k is the current wss
-                        self.failures = 0
-                        altered = True
-                        break
+                    for member in members:
+                        neighbors |= set(self.w.neighbors[member])
+                   
+                    neighbors -= set(members)
+                    candidates = []
 
-        if altered == True:
-            with self.lock:
-                currentwss = self.solnspace[:,0][self.index]
-                maxwss = np.max(self.solnspace[:,0])
+                    for neighbor in neighbors:
+                        rid = sln[neighbor]
+                        block = ids[sln == rid].tolist()
+                        if len(block) <= self.floor:
+                            continue
+                        if check_contiguity(self.w, block, neighbor):
+                            candidates.append(neighbor)
                         
-                self.solnspace[self.index][0] = self.wss
-                self.solnspace[self.index][1:] = sln
-                '''
-                #Check to see if this is also a global best
-                if self.wss < maxwss:
-                    sortedwss = np.argsort(self.solnspace[:,0])[::-1]
-                    idx = sortedwss[:self.intensificationsize]
-                    tmp = self.solnspace[idx]
-                    tmp[:,0] = self.wss
-                    tmp[:,1:] = sln
-                    self.solnspace[idx] = tmp
-                '''
-        else:
-            #TODO: Diversify the solution
-            pass
-        return
+                    if not candidates:
+                        local_swapping = False
+                    else:
+                        nc = len(candidates)
+                        best = None
+                        cv = 0.0  #TODO Needs to be a high positive number with an aspiration func
+                        for area in candidates:
+                            current_internal = members
+                            rid = sln[area]
+                            current_outter = ids[sln == rid].tolist()
+                            currentwss = self.objective_func([current_internal, current_outter])
+                            new_internal = copy.copy(current_internal)
+                            new_outter = copy.copy(current_outter)
+                            new_internal.append(area)
+                            new_outter.remove(area)
+                            newwss = self.objective_func([new_internal, new_outter])
+                            change = newwss - currentwss
+                            old_region = int(sln[area])
+                            if (area, old_region) in self.tabulist:
+                                continue
+                            elif change < cv:
+                                best = area
+                                cv = change
+                            else:
+                                pass
+                                #Aspiration function here
 
+                        if best:
+                            area = best
+                            moves_made += 1
+                            old_region = int(sln[area])
+                            #changed_regions is 0 based
+                            changed_regions[seed - 1] = 1
+                            changed_regions[old_region - 1] = 1
+                            #print "Moving area: {} from {} to {}".format(area, old_region, seed)
+                            sln[area] = seed 
+                            self.tabulist.appendleft((area, old_region))
+                            self.failures = 0
+                        else:
+                            self.failures += 1
+                            local_swapping = False
+                            #swapping = False
+
+                if self.failures >= self.maxfailures:
+                    swapping = False
+            if moves_made == 0:
+                swapping = False
+
+        new_obj = self.objective_func(sln=sln)
+        diversify = False
+        #print sln.reshape(8,8), globalobj
+        with self.lock:
+            current_obj_vector = self.solnspace[:,0]
+            if new_obj < current_obj_vector.all():
+                sortedidx = np.argsort(current_obj_vector)[::-1]
+                idx = sortedidx[0:self.intensificationsize]
+                for i in idx:
+                    self.solnspace[i][1:] = sln
+                    self.solnspace[i][0] = new_obj
+            elif new_obj < current_obj_vector[self.index]:
+                self.solnspace[self.index][1:] = sln
+                self.solnspace[self.index][0] = new_obj
+            else:
+                diversify = True
+        
+        if diversify:
+            pass
+
+        #Manual 1 iteration breaker
+        #self.maxiterations = 0
+        return
+    
     def run(self):
         #Populate the initial objective function value
         with self.lock:
@@ -183,10 +198,9 @@ class LocalSearch(mp.Process):
                 self.solncolumn[:] = self.solnspace[self.index][1:]
                 #Compute the current objective function value
                 self.wss = self.solnspace[self.index,0]
-            #Diversification occurs here, before local search
             self.failures = 0  #Reset the failure counter before each iteration
             self.localsearch()
-            
+            ''' 
             #This is a constant contiguity check that can be removed once validated.
             cont = True
             for i in range(1, int(self.nregions) + 1):
@@ -196,13 +210,14 @@ class LocalSearch(mp.Process):
                     cont = False
             if cont == False:
                 print "ERROR: ", self.__repr__()
-            
+            '''
+            # Uncomment to enable cycling around the soln space
             #Increment the index counter to step around the solution space
             self.index += 1
-            if self.index > self.solnspacesize:
+            if self.index >= self.solnspacesize:
                 self.index = 0
             self.maxiterations -= 1
-    
+            
     def computetabulength(self):
         '''Talliard 1990'''
         smin = (self.nregions - 1) * 0.9
@@ -210,30 +225,36 @@ class LocalSearch(mp.Process):
         tabu_length = 6 + (randint(0, int(smax - smin)))
         return tabu_length
 
-    def intensifysoln(self):
+    def objective_func(self, regions=None, sln=None):
         """
-        Method to populate some percentage of the best soln to the global space
-        """
-        pass
+        Computes the  objective function value
 
-    def diversifysoln(self):
-        """
-        Method to randomize a non-improving solution
-        """
-        pass
+        Parameters
+        ----------
+        regions     list of regionsids, if regions is none, computed for all regions
 
-    def objective_func(self, regions=None):
-        """
-        Computes the global objective function value
+        Returns
+        -------
+        wss         float wss
         """
         wss = 0
-        for r in range(1, int(self.nregions) + 1):
-            ids = np.where(regions == r)[0]
-            m = self.z[ids]
-            var = m.var()
-            wss += np.sum(var * len(ids))
+        if regions == None:
+            computespace = range(1, int(self.nregions) + 1)
+            for r in computespace:
+                ids = np.where(sln == r)[0]
+                m = self.z[ids]
+                var = m.var()
+                wss += np.sum(var * len(ids))
+        else:
+            computespace = regions
+            for r in computespace:
+                m = self.z[r]
+                var = m.var()
+                wss += np.sum(var * len(m))
         return wss 
 
+
+        
 
 def initshared_localsoln(_solnspace):
     global shared_solnspace

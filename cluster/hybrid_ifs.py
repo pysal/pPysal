@@ -80,145 +80,161 @@ def checkcontiguity(idx, w):
 def f(idx, w, rank):
     print "I am shared memory worker {}, managed by {}, and I see a W object with {} entries.".format(idx, rank, w.n)
 
-#MPI Boilerplate
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-nmanagers = comm.Get_size()
-status = MPI.Status()
-host = MPI.Get_processor_name()
-info = MPI.INFO_NULL
+initialo = np.zeros(100)
+finalo = np.zeros(100)
+preg = np.zeros(100)
+for a in range(100):
+    #MPI Boilerplate
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    nmanagers = comm.Get_size()
+    status = MPI.Status()
+    host = MPI.Get_processor_name()
+    info = MPI.INFO_NULL
 
-nlocalcores = mp.cpu_count()  #One core is manager
+    nlocalcores = mp.cpu_count()  #One core is manager
 
-if rank == 0:
+    if rank == 0:
+        """
+        The rank 0 process is the master manager.  This process:
+
+        1. Reads the data from the shapefile or DB
+        2. Generates the W Object
+        3. Sends the W object and attribute vector to all children
+        """
+        w = ps.lat2W(8,8)
+        random_int = RandomState(123456789)
+        attribute = random_int.random_sample((w.n, 1))
+        numifs =  8
+
+        data = {'w':w,
+                'numifs':numifs}
+
+        print "I have {} cores in a shared memory space".format(nlocalcores)
+    else:
+        data = None
+
+    #Broadcast 2 sets of data, a list of Python objects and an array of attribute information
+    data = comm.bcast(data, root=0) #Inefficient Python object, better to get full, pass and reform?
+    if rank != 0:
+        w = data['w']
+        numifs = data['numifs']
+        attribute = np.empty((w.n, 1), dtype=np.float)
+    comm.Bcast([attribute, MPI.DOUBLE])
     """
-    The rank 0 process is the master manager.  This process:
-
-    1. Reads the data from the shapefile or DB
-    2. Generates the W Object
-    3. Sends the W object and attribute vector to all children
+    for r in range(nmanagers):
+        if r == rank:
+            print "I am manager {} with {}".format(rank, w)
     """
-    w = ps.lat2W(8,8)
-    random_int = RandomState(123456789)
-    attribute = random_int.random_sample((w.n, 1))
-    numifs =  32
 
-    data = {'w':w,
-            'numifs':numifs}
-else:
-    data = None
+    solution_lock = mp.Lock()
+    csoln_space = mp.Array(ctypes.c_float, numifs * (w.n + 1), lock=solution_lock)
+    soln_space = np.frombuffer(csoln_space.get_obj(), dtype=np.float32)
+    soln_space[:] = 0.0
+    soln_space.shape = (-1, w.n + 1)
+    initshared_soln(csoln_space)
+    #Create a put/get memory window on each machine
+    window = MPI.Win.Create(soln_space, soln_space.size, info, comm)
 
-#Broadcast 2 sets of data, a list of Python objects and an array of attribute information
-data = comm.bcast(data, root=0) #Inefficient Python object, better to get full, pass and reform?
-if rank != 0:
-    w = data['w']
-    numifs = data['numifs']
-    attribute = np.empty((w.n, 1), dtype=np.float)
-comm.Bcast([attribute, MPI.DOUBLE])
-"""
-for r in range(nmanagers):
-    if r == rank:
-        print "I am manager {} with {}".format(rank, w)
-"""
+    jobs = []
+    for i in xrange(nlocalcores):
+        p = IFS(attribute, w, lock=solution_lock, pid=i, floor=7)
+        jobs.append(p)
+        p.start()
+    for j in jobs:
+        j.join()
 
-solution_lock = mp.Lock()
-csoln_space = mp.Array(ctypes.c_float, numifs * (w.n + 1), lock=solution_lock)
-soln_space = np.frombuffer(csoln_space.get_obj(), dtype=np.float32)
-soln_space[:] = 0.0
-soln_space.shape = (-1, w.n + 1)
-initshared_soln(csoln_space)
-#Create a put/get memory window on each machine
-window = MPI.Win.Create(soln_space, soln_space.size, info, comm)
+    #Local CMAX
+    localmax = np.max(soln_space[:,0])
+    #This is a Python type gather, I should move to a np array gather, maybe?
+    globalmax = comm.allgather(localmax)
+    max_globalmax = nregions = max(globalmax)
 
-jobs = []
-for i in xrange(nlocalcores):
-    p = IFS(attribute, w, lock=solution_lock, pid=i, floor=7)
-    jobs.append(p)
-    p.start()
-for j in jobs:
-    j.join()
+    #Synchronize after IFS are generate without enclaves assignment
+    comm.Barrier()
 
-#Local CMAX
-localmax = np.max(soln_space[:,0])
-#This is a Python type gather, I should move to a np array gather, maybe?
-globalmax = comm.allgather(localmax)
-max_globalmax = nregions = max(globalmax)
+    group = window.Get_group()
+    group.Free()
 
-#Synchronize after IFS are generate without enclaves assignment
-comm.Barrier()
+    if localmax <  max_globalmax:
+        print "The local solutions on rank {} are inferior to the global best p. Updating...".format(rank)
+        #Another node found a better maximum number of regions.
+        idxchoices = [i for i,x in enumerate(globalmax) if x == max_globalmax]
+        idx = random.choice(idxchoices)
+        #Using one sided communication, get a better solution space
+        window.Lock(idx)
+        window.Get(soln_space, idx)
+        window.Unlock(idx)
 
-group = window.Get_group()
-group.Free()
+    for r in xrange(nmanagers):
+        if rank == r:
+            newlocalmax = max(soln_space[:,0])
+            print "My soln space looks like: {}".format(soln_space[:,0])
+            print "I am manager {} and I initially had {} regions.  I now have {} regions.".format(rank, localmax, newlocalmax)
 
-if localmax <  max_globalmax:
-    print "The local solutions on rank {} are inferior to the global best p. Updating...".format(rank)
-    #Another node found a better maximum number of regions.
-    idxchoices = [i for i,x in enumerate(globalmax) if x == max_globalmax]
-    idx = random.choice(idxchoices)
-    #Using one sided communication, get a better solution space
-    window.Lock(idx)
-    window.Get(soln_space, idx)
-    window.Unlock(idx)
+    #Synchronize now that all solutions are standardized
+    comm.Barrier()
 
-for r in xrange(nmanagers):
-    if rank == r:
-        newlocalmax = max(soln_space[:,0])
-        print "My soln space looks like: {}".format(soln_space[:,0])
-        print "I am manager {} and I initially had {} regions.  I now have {} regions.".format(rank, localmax, newlocalmax)
+    #Assign enclaves and replace region count with wss (at index 0)
+    starts = range(0,numifs, 2)
+    stops = starts[1:] + [numifs]
+    offsets = zip(starts, stops)
+    pool = mp.Pool(nlocalcores)
+    for i in offsets:
+        result = pool.apply(assignenclaves, args=(i, w, attribute))
 
-#Synchronize now that all solutions are standardized
-comm.Barrier()
+    pool.close()
+    pool.join()
 
-#Assign enclaves and replace region count with wss (at index 0)
-starts = range(0,numifs, 2)
-stops = starts[1:] + [numifs]
-offsets = zip(starts, stops)
-pool = mp.Pool(nlocalcores)
-for i in offsets:
-    result = pool.apply(assignenclaves, args=(i, w, attribute))
+    if len(np.where(soln_space == 0)[0]) > 0:
+        print "Error in enclaves assignment! Some unit was unassigned."
 
-pool.close()
-pool.join()
+    pool = mp.Pool(nlocalcores)
+    for i in offsets:
+        result = pool.apply(checkcontiguity, args=(i, w))
 
-if len(np.where(soln_space == 0)[0]) > 0:
-    print "Error in enclaves assignment! Some unit was unassigned."
+    pool.close()
+    pool.join()
 
-pool = mp.Pool(nlocalcores)
-for i in offsets:
-    result = pool.apply(checkcontiguity, args=(i, w))
+    comm.Barrier()
 
-pool.close()
-pool.join()
+    initialbest = min(soln_space[:,0])
 
-comm.Barrier()
+    #Local Search
+    initshared_localsoln(csoln_space)
+    jobs = []
+    for i in xrange(nlocalcores):
+        p = LocalSearch(attribute, w, nregions,
+                lock=solution_lock,
+                pid=i,
+                floor=7,
+                intensification=0.5,
+                maxfailures = 50,
+                maxiterations = 15)
+        jobs.append(p)
 
-initialbest = min(soln_space[:,0])
+    for j in jobs:
+        j.start()
+    for j in jobs:
+        j.join()
 
-#Local Search
-initshared_localsoln(csoln_space)
-jobs = []
-for i in xrange(nlocalcores):
-    p = LocalSearch(attribute, w, nregions,
-            lock=solution_lock,
-            pid=i,
-            floor=7,
-            intensification=0.5,
-            maxfailures = 75,
-            maxiterations = 30)
-    jobs.append(p)
-    p.start()
-for j in jobs:
-    j.join()
 
-objfunc_values = soln_space[:,0]
-cbest = min(objfunc_values)
-cbest_idx = np.where(objfunc_values == cbest)[0]
-sol = soln_space[cbest_idx]
-sol = sol.ravel()[1:]
+    objfunc_values = soln_space[:,0]
+    cbest = min(objfunc_values)
+    cbest_idx = np.where(objfunc_values == cbest)[0]
+    sol = soln_space[cbest_idx]
+    sol = sol.ravel()[1:]
 
-print """Manager {}.
-         Initial Best: {} 
-         Local Search Best: {}
-         My solution looks like:
-{}
-""".format(rank, initialbest, cbest, sol.reshape(-1, 8))
+    print """Manager {}.
+             Initial Best: {} 
+             Local Search Best: {}
+             My solution looks like:
+    {}
+    """.format(rank, initialbest, cbest, sol.reshape(-1, 8))
+    initialo[a] = initialbest
+    finalo[a] = cbest
+    preg[a] = len(np.unique(sol))
+
+print initialo
+print finalo
+print preg

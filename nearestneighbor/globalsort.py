@@ -41,10 +41,10 @@ def globalsort(comm, rank, shape, pts=None, axis='y', pivots=None):
             idx = np.linspace(0,
                             len(sampledpts) - 1,
                             comm.size + 1,
-                            dtype=np.int)[1:]
+                            dtype=np.int)[1:-1]
             pivots = sampledpts[idx][:,axis]
         else:
-            pivots = np.empty(comm.size, dtype=np.float64)
+            pivots = np.empty(comm.size-1, dtype=np.float64)
         comm.Barrier()
         #Ndarrays need to be 'flat' to communicate
         comm.Bcast([pivots.ravel(), MPI.DOUBLE])
@@ -54,9 +54,14 @@ def globalsort(comm, rank, shape, pts=None, axis='y', pivots=None):
     #Phase IV: Partition local data into p classes using pivots
     indices = local_pts[:,axis].searchsorted(pivots)
     partitions = np.split(local_pts, indices, axis=0)
-
     partitionsizes = np.array([i.shape[0] * shape[1] for i in partitions])
     comm.Barrier()
+
+    '''
+    for i in range(comm.size):
+        if rank == i:
+            print rank, partitionsizes
+    '''
 
     #Phase V: Gather the ith partition onto this core
     sizes = np.empty(comm.size, dtype=np.int)

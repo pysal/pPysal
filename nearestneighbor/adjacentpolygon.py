@@ -1,81 +1,100 @@
 import itertools
 import sys
 import numpy as np
-from scipy.spatial.distance import euclidean
+import pysal as ps
 from mpi4py import MPI
 
 from globalsort import globalsort
 
 
-def nearestneighbor(d, data):
-    for points in itertools.combinations(data, 2):
-        a, b = points
-        dist = euclidean(a[:2], b[:2])
-        if dist < d[a[2]][0]:
-            d[a[2]] = (dist, b[2])
-        if dist < d[b[2]][0]:
-            d[b[2]] = (dist, a[2])
-
-
-def nearest_iij(data, iij, vj):
-
-    cij = set([])
-    for points in itertools.product(data, iij):
-        a, b = points
-        dist = euclidean(a[:2], b)
-        if dist < vj[a[2]][0]:
-            cij.add(a[2])
-
-    return cij
-
 
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    shape = (40,3)
     rstate = np.random.RandomState(123456)
     horizontal_pivots = np.linspace(0, 1.0, comm.size + 1)
 
     #Phase I: Compute Hi bounds and sort the points - this get the points local to the cores as well
     if rank == 0:
-        #Generate an array of points
-        pts = rstate.rand(shape[0], shape[1])
-        pts[14][:2] = [0.72, 0.29]
-        pts[:,2] = np.arange(shape[0])
-        local_hi = globalsort(comm, rank, shape, pts=pts, axis='y', pivots=horizontal_pivots[1:])
+        fname = sys.argv[1]
+        shpfileobj = ps.open(fname)
+        geoms = []
+        x = []
+        y = []
+        for i, poly in enumerate(shpfileobj):
+            for j in poly.vertices[:-1]:
+                geoms.append(i)
+                x.append(j[0])
+                y.append(j[1])
+        nvertices = len(x)
+        pts = np.empty((nvertices, 3))
+        pts[:,0] = x
+        pts[:,1] = y
+        pts[:,2] = geoms
     else:
-        local_hi = globalsort(comm, rank, shape, pts=None, axis='y', pivots=horizontal_pivots[1:])
+        nvertices = None
 
-    '''
-    for i in range(comm.size):
-        if rank == i:
-            print i, local_hi
-    '''
+    nvertices = comm.bcast(nvertices)
+    shape = (nvertices, 3)
     comm.Barrier()
-
-    #Compute the Hi nearest neighbor sets here
-    hi = {}
-    for i in local_hi[:,2]:
-        hi[i] = (np.inf, -1)
-
-    nearestneighbor(hi, local_hi)
-
-    comm.Barrier()
-    '''
-    for i in range(comm.size):
-        if rank == i:
-            print i, hi
-    '''
-
-    #Replace with dynamic bounds
-    lowervertical = 0.0
-    vertical_pivots = np.linspace(lowervertical, 1.0, comm.size + 1)
 
     if rank == 0:
-        local_vj = globalsort(comm, rank, shape, pts=pts, axis='x', pivots=vertical_pivots[1:])
+        local_hi = globalsort(comm, rank, shape, pts=pts, axis='y')
     else:
-        local_vj = globalsort(comm, rank, shape, pts=None, axis='x', pivots=vertical_pivots[1:])
+        local_hi = globalsort(comm, rank, shape, pts=None, axis='y')
 
+    '''
+    for i in range(comm.size):
+        if rank == i:
+            print i, local_hi[local_hi[:,0].argsort()]
+            sys.exit()
+    '''
+    comm.Barrier()
+
+    #Compute coincident x geometries
+    local_hi = local_hi[np.lexsort((local_hi[:,0], local_hi[:,1]))]
+    coincidentx = []
+    seed = local_hi[0][:2]
+    clist = set([])
+    for i in local_hi:
+        if np.array_equal(i[:2], seed):
+            clist.add(i[2])
+        else:
+            coincidentx.append(clist)
+            clist = set([i[2]])
+            seed = i[:2]
+
+    comm.Barrier()
+
+    if rank == 0:
+        for j in coincidentx:
+            print j
+        #I need the pivots here to do a boundary check.  Then aggregate.
+    sys.exit()
+
+    if rank == 0:
+        local_vj = globalsort(comm, rank, shape, pts=pts, axis='x')
+    else:
+        local_vj = globalsort(comm, rank, shape, pts=None, axis='x')
+
+    #Compute coincident y geometries
+    coincidenty = []
+    seed = local_vj[0][1]
+    clist = set([])
+    for i in local_vj:
+        if i[1] == seed:
+            clist.add(i[2])
+        else:
+            coincidenty.append(clist)
+            clist = set([i[2]])
+            seed = i[1]
+
+    comm.Barrier()
+
+    for i in range(comm.size):
+        if i == rank:
+            print i, coincidentx[0], coincidenty[0]
+            sys.exit()
     '''
     for i in range(comm.size):
         if rank == i:

@@ -2,7 +2,6 @@ import sys
 import numpy as np
 from mpi4py import MPI
 
-samplesize = 3
 
 axis_lookup = {'x':0, 'y':1}
 
@@ -11,14 +10,36 @@ axis_lookup = {'x':0, 'y':1}
 rstate = np.random.RandomState(123456)
 
 #Phase I: Initialize
-def globalsort(comm, rank, shape, pts=None, axis='y', pivots=None):
-    axis = axis_lookup[axis]
-    local_pts = np.empty((shape[0] / comm.size, shape[1]))
+def globalsort(comm, rank, shape, pts=None, axis='y', pivots=[], samplesize=8):
+    #axis = axis_lookup[axis]
+    #local_pts = np.empty((shape[0] / comm.size, shape[1]))
     #Phase II: Scatter the data, local quicksort, return regular sample
-    comm.Scatter([pts, MPI.DOUBLE], [local_pts, MPI.DOUBLE])
-    local_pts = local_pts[local_pts[:, axis].argsort()]
+    #comm.Scatter([pts, MPI.DOUBLE], [local_pts, MPI.DOUBLE])
+    #local_pts = local_pts[local_pts[:, axis].argsort()]
 
-    if pivots == None:
+    #'''
+    axis = axis_lookup[axis]
+
+    #Compute the data breaks, assign remainder to rank 0.  Could be smarter and balance more
+    quotient, remainder = divmod(shape[0], comm.size)
+    if rank == 0:
+        local_pts = np.empty((quotient + remainder, shape[1]))
+    else:
+        local_pts = np.empty((quotient, shape[1]))
+
+    #Compute the scatter sizes and scatter offsets
+    scattersize = list([(quotient + remainder) * shape[1]]) +\
+                  [quotient * shape[1] for i in range(comm.size-1)]
+    scatteroffsets = [0] + (np.cumsum(scattersize)[:-1]).tolist()
+    
+    #Phase II: Scatter the data, local quicksort, return regular sample
+    comm.Scatterv([pts,scattersize, scatteroffsets, MPI.DOUBLE],
+                  [local_pts, MPI.DOUBLE])
+    local_pts = local_pts[local_pts[:, axis].argsort()]
+    #'''
+    comm.Barrier()
+    
+    if len(pivots) == 0:
         #local_pts = np.sort(local_pts, axis=0)
         idx = np.linspace(0, len(local_pts) - 1,
                         samplesize + 1,
@@ -41,29 +62,34 @@ def globalsort(comm, rank, shape, pts=None, axis='y', pivots=None):
             idx = np.linspace(0,
                             len(sampledpts) - 1,
                             comm.size + 1,
-                            dtype=np.int)[1:]
+                            dtype=np.int)[1:-1]
             pivots = sampledpts[idx][:,axis]
         else:
-            pivots = np.empty(comm.size, dtype=np.float64)
+            pivots = np.empty(comm.size - 1, dtype=np.float64)
         comm.Barrier()
         #Ndarrays need to be 'flat' to communicate
         comm.Bcast([pivots.ravel(), MPI.DOUBLE])
 
     comm.Barrier()
-
     #Phase IV: Partition local data into p classes using pivots
     indices = local_pts[:,axis].searchsorted(pivots)
     partitions = np.split(local_pts, indices, axis=0)
-
-    partitionsizes = np.array([i.shape[0] * shape[1] for i in partitions])
+    partitionsizes = np.array([i.shape[0] * shape[1] for i in partitions], dtype='i')
     comm.Barrier()
 
-    #Phase V: Gather the ith partition onto this core
-    sizes = np.empty(comm.size, dtype=np.int)
+    '''
     for i in range(comm.size):
-        comm.Gather([partitionsizes[i], MPI.INTEGER],
-                    [sizes, MPI.INTEGER], root=i)
+        if rank == 0:
+            print pivots
+        if rank == i:
+            print rank, partitionsizes
+    '''
 
+    #Phase V: Gather the ith partition onto this core
+    sizes = np.zeros(comm.size, dtype='i')
+    for i in range(comm.size):
+        comm.Gather([partitionsizes[i], MPI.INT32_T],
+                    [sizes, MPI.INT32_T], root=i)
     pointcount = np.sum(sizes)
 
     #Create the memory space to collect the ith lists

@@ -249,6 +249,7 @@ if __name__ == '__main__':
             print i, near
             comm.Barrier()
 
+    sys.exit()
     if rank == 0:
         import pylab as plt
         labels = np.arange(len(pts))

@@ -10,7 +10,7 @@ from numpy.random import RandomState
 
 class IFS(mp.Process):
 
-    def __init__(self, attribute, w, iterations=100, floor=5, lock=None, pid=None):
+    def __init__(self, attribute, w, iterations=100, floor=3, lock=None, pid=None, minp = 0):
         mp.Process.__init__(self)
         self.attribute = attribute
         self.w = w
@@ -39,7 +39,7 @@ class IFS(mp.Process):
                None)
 
     def run(self):
-        solnspace = np.frombuffer(shared_solnspace.get_obj(), dtype=np.int32)
+        solnspace = np.frombuffer(shared_solnspace.get_obj(), dtype=np.float32)
         solnspace.shape = (-1, self.w.n + 1)
         while self.currentiteration < self.iterations:
             self.currentiteration += 1
@@ -126,7 +126,7 @@ def test(cores=None):
     #mp Boilerplate
     if cores == None:
         cores = mp.cpu_count()
-    numifs = 2000
+    numifs = 20
 
     #Locking solution space
     solution_lock = mp.Lock()
@@ -152,6 +152,7 @@ def test(cores=None):
         print soln_space[i][1:].reshape(-1,10)
         print
     """
+    print "Generated solution space with {} regions per solution".format(soln_space[:,0])
 
 if __name__ == '__main__':
     test()

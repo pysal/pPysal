@@ -52,6 +52,11 @@ if __name__ == '__main__':
 
     #Compute coincident x geometries
     local_hi = local_hi[np.lexsort((local_hi[:,0], local_hi[:,1]))]
+    #if rank == 0:
+        #a = local_hi
+        #ua, uind = np.unique(np.ascontiguousarray(a[:,:2]).view(np.dtype((np.void,a[:,:2].dtype.itemsize * a[:,:2].shape[1]))),return_inverse=True)
+        #for i in range(np.max(uind) + 1):
+        #print local_hi
     coincident = []
     seed = local_hi[0][:2]
     clist = set([])
@@ -62,6 +67,8 @@ if __name__ == '__main__':
             coincident.append(clist)
             clist = set([i[2]])
             seed = i[:2]
+
+    #sys.exit()
 
     neighbors = collections.defaultdict(set)
     for n in coincident:
@@ -86,8 +93,15 @@ if __name__ == '__main__':
                 except KeyError:
                     neighbors[k] = v
 
-        print len(neighbors.keys())
+        for k, v in neighbors.iteritems():
+            v.remove(k)
+        w_mpi = ps.W(neighbors)
 
+        w_ps = ps.queen_from_shapefile(sys.argv[1])
+
+        for k, v in w_mpi.neighbors.iteritems():
+            #print k, sorted(v), sorted(w_ps.neighbors[k])
+            assert(sorted(v) == sorted(w_ps.neighbors[k]))
 
 
 

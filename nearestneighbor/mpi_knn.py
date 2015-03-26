@@ -47,6 +47,12 @@ kdt_pickle = comm.bcast(kdt, root=0)
 kdt = MPI._p_pickle.loads(kdt_pickle)
 npoints = comm.bcast(npoints, root=0)
 
+'''
+#Sanity check - are the memory addresses all different? - YES
+for r in range(comm.size):
+    if rank == r:
+        print kdt
+'''
 comm.Barrier()
 if rank == 0:
     t5 = time.time()

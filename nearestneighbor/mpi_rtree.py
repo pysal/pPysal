@@ -15,115 +15,9 @@ import pysal as ps
 from pysal.cg import RTree, Rect
 from pysal.cg.standalone import get_shared_segments
 
-QUEEN = 1
-ROOK = 2
-class _PolyQ(dict):
-    def __init__(self):
-        dict.__init__(self)
-        self.size = 20  # use the first 20 objects to calculate the average Size.
-        self.ids = []
-
-    def __checkSize(self):
-        """
-        Use the objects in the Q to calculate the average size of the objects
-        Adjust Q.size to hold Q_TARGET_MEM_SIZE/avgSize object
-        This is as many average size object that fit into Q_TARGET_MEM_SIZE
-        """
-        if len(self.ids) > 50:
-            return True
-        return False
-
-    def add(self, poly):
-        if poly.id not in self:
-            if len(self.ids) >= self.size:
-                if self.__checkSize():
-                    del self[self.ids.pop(0)]
-            self[poly.id] = poly
-            self.ids.append(poly.id)
-
-class ContiguityWeights_rtree:
-    def __init__(self, geoObj, joinType=ROOK):
-        self.index = rtree.Rtree()
-        self.geoObj = geoObj
-        self.joinType = joinType
-        self.w = {}
-        self.Q = _PolyQ()
-        self.cache_hits = 0
-        self.cache_misses = 0
-        self.ids = set([])  #Hacks this this is why you don't override append...
-        self.polys = []
-
-        self.create()
-        print self.polys
-        #print "Misses: ",self.cache_misses
-        #print "Hits: ",self.cache_hits
-
-    def create(self):
-        for id, poly in enumerate(self.geoObj):
-            self.ids.add(id)
-            poly.id = id
-            self.append2(poly)
-            self.polys.append(poly)
-
-        self.geoObj.close()
-
-    def append2(self, poly):
-        self.Q.add(poly)
-        b = poly.bounding_box
-        bbox = [b.left, b.lower, b.right, b.upper]
-        for id in self.index.intersection(bbox): #Queries the rtree
-            id = int(id)
-            if self.check(id, poly) >= self.joinType:
-                self.setW(id, poly.id)
-        if poly.id not in self.w:  # add the null cases
-            self.w[poly.id] = set()
-        self.index.add(poly.id, bbox)
-
-    def setW(self, id0, id1):
-        "updates the W matrix seting two polygon's as neighbors"
-        w = self.w
-        if id0 not in w:
-            w[id0] = set()
-        if id1 not in w:
-            w[id1] = set()
-        w[id0].add(id1)
-        w[id1].add(id0)
-
-    def check(self, id0, poly1):
-        "Check's if two polygon's are neighbors"
-        if id0 in self.Q:
-            self.cache_hits += 1
-            poly0 = self.Q[id0]
-        else:
-            self.cache_misses += 1
-            poly0 = self.geoObj.get(id0)
-            poly0.id = id0
-            self.Q.add(poly0)
-        common = set(poly0.vertices).intersection(set(poly1.vertices))
-        if len(common) > 1 and self.joinType == ROOK:
-            #double check rook
-            if get_shared_segments(poly0, poly1, True):
-                return ROOK
-            return False
-            #for vert in common:
-            #    idx = poly0.vertices.index(vert)
-            #    IDX = poly1.vertices.index(vert)
-            #    try:
-            #        if poly0.vertices[idx+1] == poly1.vertices[IDX+1] or poly0.vertices[idx+1] == poly1.vertices[IDX-1]\
-            #        or poly0.vertices[idx-1] == poly1.vertices[IDX+1] or poly0.vertices[idx-1] == poly1.vertices[IDX-1]:
-            #            return ROOK
-            #    except IndexError:
-            #        pass
-            #return False
-        elif len(common) > 0:
-            return QUEEN
-        else:
-            return False
-
 #MPI Boilerplate
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
-
 
 if rank == 0:
     t1 = time.time()
@@ -185,6 +79,10 @@ for bbox, poly1 in polys[scatteroffsets[rank]:scatteroffsets[rank+1]]:
             localw[cpid].add(pid)
     cpid += 1
 
+if rank == 0:
+    t5 = time.time()
+    print "Locals RTree query took {} seconds".format(t5 - t4)
+
 '''
 for r in range(comm.size):
     if r == rank:
@@ -195,10 +93,17 @@ gatherw = comm.gather(localw, root=0)
 comm.Barrier()
 
 if rank == 0:
+    t6 = time.time()
+    print "Gathering locals Ws took {} seconds".format(t6 - t5)
+
+if rank == 0:
     w = gatherw[0]
     for localw in gatherw[1:]:
         for k, v in localw.iteritems():
             w[k] = w[k].union(v)
-
+    t7 = time.time()
+    print "Merge took {} seconds".format(t7 - t6)
     W = ps.W(w)
-    print W.histogram
+    t8 = time.time()
+    print "PS W creation took {} seconds".format(t8 - t7)
+    print "Total runtime was {} seconds".format(t8 - t1)

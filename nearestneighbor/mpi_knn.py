@@ -24,17 +24,18 @@ rank = comm.Get_rank()
 
 
 if rank == 0:
-    t1 = time.time()
     shape = (int(sys.argv[1]),2)
     npoints = shape[0]
     rstate = np.random.RandomState(123456)
+    print "Using {} cores for {} points".format(comm.size, npoints)
+    t1 = time.time()
     points = rstate.rand(shape[0], shape[1])
     t2 = time.time()
     print "Generating points array took {} seconds.".format(t2 - t1)
 
     t3 = time.time()
     kdt_class = kdtree.KDTree(points)
-    kdt = MPI._p_pickle.dumps(kdt_class)
+    kdt = MPI.pickle.dumps(kdt_class)
     t4 = time.time()
     print "KDTree generation required {} seconds".format(t4 - t3)
 
@@ -44,7 +45,7 @@ else:
     points = None
 
 kdt_pickle = comm.bcast(kdt, root=0)
-kdt = MPI._p_pickle.loads(kdt_pickle)
+kdt = MPI.pickle.loads(kdt_pickle)
 npoints = comm.bcast(npoints, root=0)
 
 comm.Barrier()
